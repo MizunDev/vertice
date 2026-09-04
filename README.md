@@ -72,7 +72,7 @@ interfaz saturada.
 La información debe aparecer progresivamente según el contexto y el
 interés del usuario.
 
-##🎯 MVP
+## 🎯 MVP
 
 El MVP debe permitir:
 
@@ -93,7 +93,7 @@ El MVP debe utilizar inicialmente datos reales o una fuente de datos
 estructurada y confiable, pero la interfaz y arquitectura deben permitir
 cambiar la fuente de datos posteriormente.
 
-##📊 Estadísticas
+## 📊 Estadísticas
 
 VÉRTICE debe intentar recopilar la mayor cantidad posible de estadísticas
 matemáticas disponibles públicamente para cada competición.
