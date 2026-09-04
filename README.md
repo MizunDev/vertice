@@ -143,7 +143,7 @@ Las estadísticas concretas no deben inventarse ni asumirse como
 universales. VÉRTICE debe representar únicamente las métricas que la
 fuente de datos proporcione de forma fiable.
 
-##🧭 Experiencia de navegación
+## 🧭 Experiencia de navegación
 
 La interfaz debe evitar la saturación visual.
 
@@ -163,7 +163,7 @@ obligado a consumirla toda de una vez.
 
 La interfaz debe priorizar la sensación de exploración y continuidad.
 
-##🚫 Principios que VÉRTICE NO debe seguir
+## 🚫 Principios que VÉRTICE NO debe seguir
 No mostrar toda la información disponible simultáneamente.
 No llenar la interfaz de tarjetas innecesarias.
 No utilizar banners invasivos.
