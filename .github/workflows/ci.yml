@@ -1,0 +1,52 @@
+name: Integracion Continua VERTICE
+
+# ¿Cuándo se ejecuta? Cada vez que subas código a la rama main
+on:
+  push:
+    branches: [ "main", "master" ]
+
+jobs:
+  pruebas-funcionales:
+    runs-on: ubuntu-latest
+    
+    # ¡Magia de DevOps! Le decimos a GitHub que levante un PostgreSQL temporal 
+    # solo para que nuestras pruebas tengan dónde conectarse.
+    services:
+      db:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: super_password
+          POSTGRES_DB: vertice_db
+        ports:
+          - 5432:5432
+        # Espera a que la BD esté lista antes de continuar (evita el error que vimos antes)
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    # 1. Clona tu repositorio
+    - uses: actions/checkout@v4
+    
+    # 2. Instala Python 3.12
+    - name: Configurar Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+        
+    # 3. Instala tus librerías (FastAPI, SQLModel, Pytest, etc.)
+    - name: Instalar dependencias
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        
+    # 4. Ejecuta tus casos de prueba automatizados
+    - name: Ejecutar pruebas con Pytest
+      env:
+        # Apuntamos a la base de datos temporal que GitHub acaba de levantar
+        DATABASE_URL: postgresql://postgres:super_password@localhost:5432/vertice_db
+      run: |
+        pytest
