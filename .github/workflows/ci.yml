@@ -46,7 +46,7 @@ jobs:
     # 4. Ejecuta tus casos de prueba automatizados
     - name: Ejecutar pruebas con Pytest
       env:
-        # Apuntamos a la base de datos temporal que GitHub acaba de levantar
         DATABASE_URL: postgresql://postgres:super_password@localhost:5432/vertice_db
+        PYTHONPATH: .   # <--- ESTA ES LA LÍNEA MÁGICA QUE SOLUCIONA EL ERROR
       run: |
         pytest
