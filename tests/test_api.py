@@ -1,3 +1,5 @@
+import pytest
+from sqlalchemy.exc import DataError
 from fastapi.testclient import TestClient
 from src.main import app
 
@@ -35,7 +37,7 @@ def test_crear_partido_inserta_datos_correctamente():
         assert datos_guardados["estado"] == "programado"
 
 
-# --- LA TRAMPA (Añadida al final) ---
+# --- EL CASO DE PRUEBA NEGATIVO ---
 def test_crear_partido_con_estado_falso_hace_explotar_el_pipeline():
     with TestClient(app) as client:
         partido_malo = {
@@ -47,8 +49,7 @@ def test_crear_partido_con_estado_falso_hace_explotar_el_pipeline():
             "estado": "arbitro_borracho" # <--- El estado que no existe en el Enum
         }
         
-        response = client.post("/partidos/", json=partido_malo)
-        
-        # Exigimos un 200 a propósito sabiendo que el servidor dará un 422.
-        # Esto es lo que causará que el pipeline colapse y muestre la X roja.
-        assert response.status_code == 200
+        # Le decimos a pytest: "Vigila esta petición. Si NO causa un DataError, el test falla. 
+        # Si SÍ causa un DataError, el test pasa porque la BD reaccionó como esperábamos".
+        with pytest.raises(DataError):
+            client.post("/partidos/", json=partido_malo)
