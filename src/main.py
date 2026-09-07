@@ -59,11 +59,18 @@ def get_session():
 # --- ENDPOINTS DE PARTIDOS ---
 
 @app.post("/partidos/", response_model=Partido)
-def crear_partido(partido: Partido, session: Session = Depends(get_session)):
-    session.add(partido)
+def crear_partido(partido_in: PartidoBase, session: Session = Depends(get_session)):
+    # 1. FastAPI y Pydantic ya filtraron con PartidoBase. 
+    # Si llegó aquí, los datos son 100% seguros y el estado es válido.
+    
+    # 2. Convertimos los datos limpios al molde de la base de datos (Partido)
+    partido_db = Partido.model_validate(partido_in)
+    
+    # 3. Guardamos en PostgreSQL
+    session.add(partido_db)
     session.commit()
-    session.refresh(partido)
-    return partido
+    session.refresh(partido_db)
+    return partido_db
 
 @app.get("/partidos/", response_model=list[Partido])
 def leer_partidos(session: Session = Depends(get_session)):
@@ -72,16 +79,11 @@ def leer_partidos(session: Session = Depends(get_session)):
 
 # --- ENDPOINT DE DETALLE DE PARTIDO ---
 
-# Usamos el id en la URL para buscar un partido específico y devolver sus estadísticas
 @app.get("/partidos/{partido_id}", response_model=PartidoConEstadisticas)
 def leer_detalle_partido(partido_id: int, session: Session = Depends(get_session)):
-    # session.get() busca un registro por su clave primaria (id)
     partido = session.get(Partido, partido_id)
-    
-    # Validación por si el partido no existe en la base de datos
     if not partido:
         raise HTTPException(status_code=404, detail="Partido no encontrado")
-        
     return partido
 
 # --- NUEVOS ENDPOINTS DE ESTADÍSTICAS ---
