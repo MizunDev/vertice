@@ -3,6 +3,7 @@ import datetime
 from enum import Enum
 from fastapi import FastAPI, Depends, HTTPException, status, Response, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from sqlmodel import SQLModel, Field, Session, select, Relationship
 from contextlib import asynccontextmanager
@@ -53,8 +54,6 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="VÉRTICE API", lifespan=lifespan)
 
-# OJO CON EL CORS: Cuando usamos cookies seguras entre puertos diferentes (ej. Frontend 5173/80 y Backend 8000), 
-# allow_origins no puede ser ["*"], debe permitir credenciales explícitamente.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost", "http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:5174"],
@@ -63,13 +62,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- VERIFICACIÓN DE TOKEN DESDE COOKIE HTTP-ONLY ---
-def verificar_token(request: Request):
+security = HTTPBearer(auto_error=False)
+
+# --- VERIFICACIÓN HÍBRIDA: COOKIE HTTP-ONLY O HEADER BEARER (PARA PYTEST) ---
+def verificar_token(request: Request, credentials: HTTPAuthorizationCredentials = Depends(security)):
     token = request.cookies.get("vertice_token")
+    
+    if not token and credentials:
+        token = credentials.credentials
+
     if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="No autenticado. Falta la cookie de sesión.",
+            detail="No autenticado. Falta la cookie o el token de sesión.",
         )
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
@@ -100,14 +105,13 @@ def login(credentials: LoginRequest, response: Response):
         }
         token = jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
         
-        # 🛡️ Inyectamos la Cookie HTTP-only de forma segura
         response.set_cookie(
             key="vertice_token",
             value=token,
-            httponly=True,     # Inaccesible a JavaScript (Protege contra XSS)
-            secure=False,      # Cambiar a True si subes la app a producción con HTTPS estricto
-            samesite="lax",    # Protección contra Cross-Site Request Forgery
-            max_age=86400      # 24 horas en segundos
+            httponly=True,
+            secure=False,
+            samesite="lax",
+            max_age=86400
         )
         return {"ok": True, "mensaje": "Sesión iniciada correctamente"}
     
@@ -116,7 +120,7 @@ def login(credentials: LoginRequest, response: Response):
         detail="Credenciales incorrectas"
     )
 
-# --- ENDPOINT DE LOGOUT (Borra la Cookie) ---
+# --- ENDPOINT DE LOGOUT ---
 @app.post("/logout")
 def logout(response: Response):
     response.delete_cookie(key="vertice_token")
