@@ -1,5 +1,7 @@
+import os  # NUEVO
 from enum import Enum
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, status  # MODIFICADO (se añadió status)
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials  # NUEVO
 from sqlmodel import SQLModel, Field, Session, select, Relationship
 from contextlib import asynccontextmanager
 from src.database import crear_tablas_db, engine
@@ -52,26 +54,36 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="VÉRTICE API", lifespan=lifespan)
 
+# --- NUEVO: CONFIGURACIÓN DE SEGURIDAD ---
+security = HTTPBearer()
+API_TOKEN = os.getenv("API_TOKEN", "vertice_qa_token_2026") # Toma la variable de entorno o usa un default
+
+def verificar_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    if credentials.credentials != API_TOKEN:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token inválido o expirado",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return credentials.credentials
+# -----------------------------------------
+
 def get_session():
     with Session(engine) as session:
         yield session
 
 # --- ENDPOINTS DE PARTIDOS ---
 
-@app.post("/partidos/", response_model=Partido)
+# MODIFICADO: Se inyectó la dependencia de seguridad solo en el POST
+@app.post("/partidos/", response_model=Partido, dependencies=[Depends(verificar_token)])
 def crear_partido(partido_in: PartidoBase, session: Session = Depends(get_session)):
-    # 1. FastAPI y Pydantic ya filtraron con PartidoBase. 
-    # Si llegó aquí, los datos son 100% seguros y el estado es válido.
-    
-    # 2. Convertimos los datos limpios al molde de la base de datos (Partido)
     partido_db = Partido.model_validate(partido_in)
-    
-    # 3. Guardamos en PostgreSQL
     session.add(partido_db)
     session.commit()
     session.refresh(partido_db)
     return partido_db
 
+# GET queda público (sin dependencies)
 @app.get("/partidos/", response_model=list[Partido])
 def leer_partidos(session: Session = Depends(get_session)):
     return session.exec(select(Partido)).all()
@@ -79,6 +91,7 @@ def leer_partidos(session: Session = Depends(get_session)):
 
 # --- ENDPOINT DE DETALLE DE PARTIDO ---
 
+# GET queda público (sin dependencies)
 @app.get("/partidos/{partido_id}", response_model=PartidoConEstadisticas)
 def leer_detalle_partido(partido_id: int, session: Session = Depends(get_session)):
     partido = session.get(Partido, partido_id)
@@ -88,7 +101,8 @@ def leer_detalle_partido(partido_id: int, session: Session = Depends(get_session
 
 # --- NUEVOS ENDPOINTS DE ESTADÍSTICAS ---
 
-@app.post("/estadisticas/", response_model=EstadisticasPartido)
+# MODIFICADO: Se inyectó la dependencia de seguridad en la creación de estadísticas
+@app.post("/estadisticas/", response_model=EstadisticasPartido, dependencies=[Depends(verificar_token)])
 def crear_estadisticas(estadisticas: EstadisticasPartido, session: Session = Depends(get_session)):
     session.add(estadisticas)
     session.commit()

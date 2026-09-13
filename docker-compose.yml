@@ -23,14 +23,15 @@ services:
       - db
 
   api:
-      build: .
-      ports:
-        - "8000:8000"
-      depends_on:
-        - db
-      restart: on-failure   # <--- LA MAGIA DE DEVOPS
-      environment:
-        - DATABASE_URL=postgresql://postgres:super_password@db/vertice_db
+    build: .
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+    restart: on-failure
+    environment:
+      - DATABASE_URL=postgresql://postgres:super_password@db/vertice_db
+      - API_TOKEN=vertice_qa_token_2026 # <-- NUEVA LÍNEA
 
 volumes:
   postgres_data:
