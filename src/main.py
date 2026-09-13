@@ -10,6 +10,7 @@ from contextlib import asynccontextmanager
 import jwt
 from src.database import crear_tablas_db, engine
 
+
 SECRET_KEY = os.getenv("SECRET_KEY", "vertice_super_secreto_jwt_2026")
 ALGORITHM = "HS256"
 
@@ -39,13 +40,11 @@ class TipoEquipo(str, Enum):
 # 2. MODELOS JERÁRQUICOS Y RELACIONALES
 # ==========================================
 
-# Tabla Intermedia (Muchos a Muchos: Equipos <-> Competiciones)
 class Participacion(SQLModel, table=True):
     equipo_id: int | None = Field(default=None, foreign_key="equipo.id", primary_key=True)
     competicion_id: int | None = Field(default=None, foreign_key="competicion.id", primary_key=True)
 
 
-# --- CONFEDERACIONES ---
 class ConfederacionBase(SQLModel):
     nombre: str = Field(index=True, unique=True)
     logo: str
@@ -61,7 +60,6 @@ class ConfederacionRead(ConfederacionBase):
     id: int
 
 
-# --- COMPETICIONES ---
 class CompeticionBase(SQLModel):
     nombre: str
     logo: str
@@ -81,7 +79,6 @@ class CompeticionRead(CompeticionBase):
     id: int
 
 
-# --- EQUIPOS ---
 class EquipoBase(SQLModel):
     nombre: str
     logo: str
@@ -112,10 +109,6 @@ class EquipoRead(EquipoBase):
 class EquipoConCompeticionesRead(EquipoRead):
     competiciones: list[CompeticionRead] = []
 
-
-# ==========================================
-# 3. REFACTORIZACIÓN: PARTIDOS Y ESTADÍSTICAS
-# ==========================================
 
 class EstadisticasPartido(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
@@ -178,11 +171,15 @@ class LoginRequest(BaseModel):
 
 
 # ==========================================
-# 4. CONFIGURACIÓN Y MIDDLEWARE
+# 4. CONFIGURACIÓN Y MIDDLEWARE (IMPORT LOCAL DE SEED)
 # ==========================================
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     crear_tablas_db()
+    # Importación local corregida apuntando a src.seed
+    from src.seed import ejecutar_seed
+    with Session(engine) as session:
+        ejecutar_seed(session)
     yield
 
 
@@ -304,12 +301,10 @@ def eliminar_confederacion(id: int, session: Session = Depends(get_session), usu
 @app.post("/competiciones/", response_model=CompeticionRead)
 def crear_competicion(comp_in: CompeticionBase, session: Session = Depends(get_session),
                       usuario: str = Depends(verificar_token)):
-    # BLINDAJE: Verificación de País vs Naturaleza del Torneo
     if comp_in.tipo in [TipoCompeticion.LIGA_NACIONAL, TipoCompeticion.COPA_NACIONAL]:
         if not comp_in.pais or comp_in.pais.lower() == "internacional":
             raise HTTPException(status_code=400, detail="Ligas Nacionales deben tener un país específico.")
     else:
-        # Forzamos "Internacional" para evitar que creen la Champions League asignada a "Colombia"
         comp_in.pais = "Internacional"
 
     comp_db = Competicion.model_validate(comp_in)
@@ -331,7 +326,6 @@ def editar_competicion(id: int, comp_in: CompeticionBase, session: Session = Dep
     if not comp:
         raise HTTPException(status_code=404, detail="Competición no encontrada")
 
-    # BLINDAJE EDICIÓN
     if comp_in.tipo in [TipoCompeticion.LIGA_NACIONAL, TipoCompeticion.COPA_NACIONAL]:
         if not comp_in.pais or comp_in.pais.lower() == "internacional":
             raise HTTPException(status_code=400, detail="Ligas Nacionales deben tener un país específico.")
@@ -366,7 +360,6 @@ def eliminar_competicion(id: int, session: Session = Depends(get_session), usuar
 @app.post("/equipos/", response_model=EquipoRead)
 def crear_equipo(equipo_in: EquipoBase, session: Session = Depends(get_session),
                  usuario: str = Depends(verificar_token)):
-    # BLINDAJE: Las Selecciones Nacionales asumen su nombre como país
     if equipo_in.tipo == TipoEquipo.SELECCION:
         equipo_in.pais = equipo_in.nombre
 
@@ -389,7 +382,6 @@ def editar_equipo(id: int, eq_in: EquipoBase, session: Session = Depends(get_ses
     if not eq:
         raise HTTPException(status_code=404, detail="Equipo no encontrado")
 
-    # BLINDAJE EDICIÓN
     if eq_in.tipo == TipoEquipo.SELECCION:
         eq_in.pais = eq_in.nombre
 
@@ -427,27 +419,22 @@ def matricular_equipo(equipo_id: int, competicion_id: int, session: Session = De
     if not equipo or not competicion:
         raise HTTPException(status_code=404, detail="Equipo o Competición no encontrados")
 
-    # REGLA 1: Barrera de Naturaleza
     if competicion.tipo == TipoCompeticion.INTERNACIONAL_SELECCIONES and equipo.tipo != TipoEquipo.SELECCION:
         raise HTTPException(status_code=400, detail="A torneos de selecciones solo pueden entrar selecciones.")
     if competicion.tipo != TipoCompeticion.INTERNACIONAL_SELECCIONES and equipo.tipo == TipoEquipo.SELECCION:
         raise HTTPException(status_code=400, detail="Una selección no puede disputar torneos de clubes.")
 
-    # REGLA 2: Frontera Geográfica (Ligas Locales)
     if competicion.tipo in [TipoCompeticion.LIGA_NACIONAL, TipoCompeticion.COPA_NACIONAL]:
         if equipo.pais != competicion.pais:
             raise HTTPException(status_code=400,
                                 detail=f"Un equipo de {equipo.pais} no puede jugar en la liga de {competicion.pais}.")
 
-    # REGLA 3: Jurisdicción Continental (Copas Internacionales)
     if competicion.confederacion_id and competicion.confederacion_id != equipo.confederacion_id:
         raise HTTPException(status_code=400, detail="El equipo no pertenece a la misma confederación del torneo.")
 
-    # REVISIÓN FINAL: ¿Ya está matriculado?
     if competicion in equipo.competiciones:
         return {"ok": False, "mensaje": f"El equipo {equipo.nombre} ya participa en {competicion.nombre}"}
 
-    # MATRICULACIÓN EXITOSA
     equipo.competiciones.append(competicion)
     session.add(equipo)
     session.commit()
