@@ -47,6 +47,7 @@ jobs:
     - name: Ejecutar pruebas con Pytest
       env:
         DATABASE_URL: postgresql://postgres:super_password@localhost:5432/vertice_db
-        PYTHONPATH: .   # <--- ESTA ES LA LÍNEA MÁGICA QUE SOLUCIONA EL ERROR
+        PYTHONPATH: .
+        API_TOKEN: vertice_qa_token_2026   # <--- NUEVO: Inyectamos el token requerido por el guardia Bearer
       run: |
         pytest

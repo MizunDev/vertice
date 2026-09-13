@@ -1,8 +1,12 @@
 from fastapi.testclient import TestClient
 from src.main import app
 
+# Token de prueba configurado en la API
+TOKEN_PRUEBA = "vertice_qa_token_2026"
+HEADERS_AUTH = {"Authorization": f"Bearer {TOKEN_PRUEBA}"}
+
 def test_leer_partidos_devuelve_lista_y_200():
-    # El bloque 'with' obliga a FastAPI a ejecutar el 'lifespan' (crear_tablas_db)
+    # El GET es público, así que no necesita headers de autorización
     with TestClient(app) as client:
         response = client.get("/partidos/")
         assert response.status_code == 200
@@ -20,7 +24,8 @@ def test_crear_partido_inserta_datos_correctamente():
             "estado": "programado" # Estado válido
         }
         
-        response = client.post("/partidos/", json=nuevo_partido)
+        # Enviamos los headers con el token válido
+        response = client.post("/partidos/", json=nuevo_partido, headers=HEADERS_AUTH)
         
         assert response.status_code == 200
         datos_guardados = response.json()
@@ -41,7 +46,8 @@ def test_crear_partido_con_estado_falso_es_rechazado_con_422():
             "estado": "arbitro_borracho" # <--- Estado inválido
         }
         
-        response = client.post("/partidos/", json=partido_malo)
+        # Con el token autorizado, la seguridad deja pasar la petición y Pydantic atrapa el 422
+        response = client.post("/partidos/", json=partido_malo, headers=HEADERS_AUTH)
         
         # Validamos que Pydantic interceptó el dato ANTES de que llegara a la BD
         assert response.status_code == 422
