@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { apiCollection, apiRequest } from './api';
 
 // ==========================================
 // ICONOS VECTORIALES (REEMPLAZO DE EMOJIS)
@@ -23,7 +24,7 @@ export default function Dashboard() {
   const [competiciones, setCompeticiones] = useState([]);
   const [equipos, setEquipos] = useState([]);
 
-  const [loginForm, setLoginForm] = useState({ username: 'admin', password: '' });
+  const [loginForm, setLoginForm] = useState({ username: '', password: '' });
 
   // Estados para CRUD
   const [editConfId, setEditConfId] = useState(null);
@@ -42,151 +43,167 @@ export default function Dashboard() {
   const [mensajeApi, setMensajeApi] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  // --- FETCHERS ---
-  const fetchPartidos = () => {
-    fetch('http://localhost:8000/partidos/', { credentials: 'include' })
-      .then(res => res.ok ? res.json() : Promise.reject())
-      .then(data => { setPartidos(data); setIsLoggedIn(true); })
-      .catch(() => setIsLoggedIn(false));
-  };
-
-  const fetchCatalogs = () => {
-    Promise.all([
-      fetch('http://localhost:8000/confederaciones/', { credentials: 'include' }).then(r => r.json()),
-      fetch('http://localhost:8000/competiciones/', { credentials: 'include' }).then(r => r.json()),
-      fetch('http://localhost:8000/equipos/', { credentials: 'include' }).then(r => r.json())
-    ]).then(([confs, comps, eqs]) => {
-      setConfederaciones(confs); setCompeticiones(comps); setEquipos(eqs);
-    }).catch(err => console.error("Error cargando catálogos", err));
-  };
-
-  useEffect(() => { if (isLoggedIn) fetchCatalogs(); }, [isLoggedIn]);
-  useEffect(() => { fetchPartidos(); }, []);
-
-  // --- HANDLERS (AUTH) ---
-  const handleLogin = async (e) => {
-    e.preventDefault();
-    try {
-      const res = await fetch('http://localhost:8000/login', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(loginForm)
-      });
-      if (res.ok) { setIsLoggedIn(true); fetchPartidos(); fetchCatalogs(); }
-      else setMensajeApi({ tipo: 'error', texto: 'Credenciales denegadas.' });
-    } catch (err) { setMensajeApi({ tipo: 'error', texto: 'Fallo de conexión.' }); }
-  };
-
-  const handleLogout = async () => {
-    try { await fetch('http://localhost:8000/logout', { method: 'POST', credentials: 'include' }); } catch (e) {}
-    setIsLoggedIn(false); setPartidos([]);
-  };
-
   const notify = (tipo, texto) => {
     setMensajeApi({ tipo, texto });
     setTimeout(() => setMensajeApi(null), 3500);
   };
 
+  const clearSession = () => {
+    setIsLoggedIn(false);
+    setPartidos([]); setConfederaciones([]); setCompeticiones([]); setEquipos([]);
+    setLoginForm(form => ({ ...form, password: '' }));
+  };
+
+  const handleApiError = (error) => {
+    if (error.status === 401) clearSession();
+    notify('error', error.status ? error.message : 'No se pudo conectar con el servidor.');
+  };
+
+  // Solo se guardan listas válidas; un 401 vuelve al login sin romper la vista.
+  const fetchPartidos = async () => {
+    try {
+      const data = await apiCollection('/partidos/');
+      setPartidos(data); setIsLoggedIn(true);
+    } catch (error) { handleApiError(error); }
+  };
+
+  const fetchCatalogs = async () => {
+    try {
+      const [confs, comps, eqs] = await Promise.all([
+        apiCollection('/confederaciones/'),
+        apiCollection('/competiciones/'),
+        apiCollection('/equipos/'),
+      ]);
+      setConfederaciones(confs); setCompeticiones(comps); setEquipos(eqs);
+    } catch (error) { handleApiError(error); }
+  };
+
+  useEffect(() => { if (isLoggedIn) fetchCatalogs(); }, [isLoggedIn]);
+  useEffect(() => { fetchPartidos(); }, []);
+
+  const handleLogin = async (e) => {
+    e.preventDefault(); setLoading(true); setMensajeApi(null);
+    try {
+      await apiRequest('/login', { method: 'POST', body: loginForm });
+      setLoginForm(form => ({ ...form, password: '' }));
+      await fetchPartidos();
+    } catch (error) { handleApiError(error); }
+    finally { setLoading(false); }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await apiRequest('/logout', { method: 'POST' });
+      clearSession(); setMensajeApi(null);
+    } catch (error) { handleApiError(error); }
+  };
+
   // --- CRUD CONFEDERACIONES ---
   const handleSubmitConf = async (e) => {
     e.preventDefault(); setLoading(true);
-    const method = editConfId ? 'PUT' : 'POST';
-    const url = editConfId ? `http://localhost:8000/confederaciones/${editConfId}` : 'http://localhost:8000/confederaciones/';
     try {
-      const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(formConf) });
-      if (res.ok) { notify('success', 'Confederación Guardada'); setFormConf({ nombre: '', logo: '' }); setEditConfId(null); fetchCatalogs(); }
-      else notify('error', 'Error en operación');
-    } catch (err) { notify('error', 'Fallo de red'); }
-    setLoading(false);
+      await apiRequest(editConfId ? `/confederaciones/${editConfId}` : '/confederaciones/', {
+        method: editConfId ? 'PUT' : 'POST', body: formConf,
+      });
+      notify('success', 'Confederación guardada');
+      setFormConf({ nombre: '', logo: '' }); setEditConfId(null);
+      await fetchCatalogs();
+    } catch (error) { handleApiError(error); }
+    finally { setLoading(false); }
   };
   const handleEditConf = (c) => { setFormConf({ nombre: c.nombre, logo: c.logo }); setEditConfId(c.id); setFiltroPais(''); };
-  const handleEliminarConf = async (id) => {
-    if (!confirm('¿Eliminar? Ligas y Equipos quedarán huérfanos pero intactos.')) return;
-    await fetch(`http://localhost:8000/confederaciones/${id}`, { method: 'DELETE', credentials: 'include' });
-    fetchCatalogs();
+
+  const deleteEntity = async (path) => {
+    try {
+      await apiRequest(path, { method: 'DELETE' });
+      await Promise.all([fetchCatalogs(), fetchPartidos()]);
+    } catch (error) { handleApiError(error); }
+  };
+  const handleEliminarConf = (id) => {
+    if (confirm('¿Eliminar? Ligas y equipos quedarán huérfanos pero intactos.')) return deleteEntity(`/confederaciones/${id}`);
   };
 
   // --- CRUD COMPETICIONES ---
   const handleSubmitComp = async (e) => {
     e.preventDefault(); setLoading(true);
-    const payload = { ...formComp, confederacion_id: parseInt(formComp.confederacion_id) || null };
-    const method = editCompId ? 'PUT' : 'POST';
-    const url = editCompId ? `http://localhost:8000/competiciones/${editCompId}` : 'http://localhost:8000/competiciones/';
     try {
-      const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(payload) });
-      if (res.ok) { notify('success', 'Competición Guardada'); setFormComp({ nombre: '', logo: '', tipo: 'liga_nacional', pais: '', confederacion_id: '' }); setEditCompId(null); fetchCatalogs(); }
-      else { const d = await res.json(); notify('error', d.detail || 'Error al guardar'); }
-    } catch (err) { notify('error', 'Fallo de red'); }
-    setLoading(false);
+      await apiRequest(editCompId ? `/competiciones/${editCompId}` : '/competiciones/', {
+        method: editCompId ? 'PUT' : 'POST',
+        body: { ...formComp, confederacion_id: parseInt(formComp.confederacion_id) || null },
+      });
+      notify('success', 'Competición guardada');
+      setFormComp({ nombre: '', logo: '', tipo: 'liga_nacional', pais: '', confederacion_id: '' }); setEditCompId(null);
+      await Promise.all([fetchCatalogs(), fetchPartidos()]);
+    } catch (error) { handleApiError(error); }
+    finally { setLoading(false); }
   };
   const handleEditComp = (c) => { setFormComp({ nombre: c.nombre, logo: c.logo, tipo: c.tipo, pais: c.pais, confederacion_id: c.confederacion_id || '' }); setEditCompId(c.id); };
-  const handleEliminarComp = async (id) => {
-    if (!confirm('¿Eliminar Liga? Partidos asociados quedarán sin torneo.')) return;
-    await fetch(`http://localhost:8000/competiciones/${id}`, { method: 'DELETE', credentials: 'include' });
-    fetchCatalogs(); fetchPartidos();
+  const handleEliminarComp = (id) => {
+    if (confirm('¿Eliminar liga? Los partidos asociados quedarán sin torneo.')) return deleteEntity(`/competiciones/${id}`);
   };
 
   // --- CRUD EQUIPOS ---
   const handleSubmitEquipo = async (e) => {
     e.preventDefault(); setLoading(true);
-    const payload = { ...formEquipo, confederacion_id: parseInt(formEquipo.confederacion_id) || null };
-    const method = editEqId ? 'PUT' : 'POST';
-    const url = editEqId ? `http://localhost:8000/equipos/${editEqId}` : 'http://localhost:8000/equipos/';
     try {
-      const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(payload) });
-      if (res.ok) { notify('success', 'Escuadra Guardada'); setFormEquipo({ nombre: '', logo: '', tipo: 'club', pais: '', confederacion_id: '' }); setEditEqId(null); fetchCatalogs(); }
-      else { const d = await res.json(); notify('error', d.detail || 'Error al guardar'); }
-    } catch (err) { notify('error', 'Fallo de red'); }
-    setLoading(false);
+      await apiRequest(editEqId ? `/equipos/${editEqId}` : '/equipos/', {
+        method: editEqId ? 'PUT' : 'POST',
+        body: { ...formEquipo, confederacion_id: parseInt(formEquipo.confederacion_id) || null },
+      });
+      notify('success', 'Escuadra guardada');
+      setFormEquipo({ nombre: '', logo: '', tipo: 'club', pais: '', confederacion_id: '' }); setEditEqId(null);
+      await Promise.all([fetchCatalogs(), fetchPartidos()]);
+    } catch (error) { handleApiError(error); }
+    finally { setLoading(false); }
   };
   const handleEditEq = (eq) => { setFormEquipo({ nombre: eq.nombre, logo: eq.logo, tipo: eq.tipo, pais: eq.pais, confederacion_id: eq.confederacion_id || '' }); setEditEqId(eq.id); };
-  const handleEliminarEq = async (id) => {
-    if (!confirm('¿Eliminar Escuadra? Sus partidos en la arena quedarán incompletos.')) return;
-    await fetch(`http://localhost:8000/equipos/${id}`, { method: 'DELETE', credentials: 'include' });
-    fetchCatalogs(); fetchPartidos();
+  const handleEliminarEq = (id) => {
+    if (confirm('¿Eliminar escuadra? Sus partidos quedarán incompletos.')) return deleteEntity(`/equipos/${id}`);
   };
 
-  // --- MATRÍCULAS ---
   const handleMatricular = async (e) => {
     e.preventDefault(); setLoading(true);
     try {
-      const res = await fetch(`http://localhost:8000/equipos/${formMatricula.equipo_id}/matricular/${formMatricula.competicion_id}`, { method: 'POST', credentials: 'include' });
-      const data = await res.json();
-      if (res.ok && data.ok) { notify('success', data.mensaje); fetchCatalogs(); setFormMatricula({ equipo_id: '', competicion_id: '' }); }
-      else notify('error', data.detail || data.mensaje || 'Incompatibilidad detectada');
-    } catch (err) { notify('error', 'Fallo de red al afiliar'); }
-    setLoading(false);
+      const data = await apiRequest(`/equipos/${formMatricula.equipo_id}/matricular/${formMatricula.competicion_id}`, { method: 'POST' });
+      notify(data.ok ? 'success' : 'error', data.mensaje);
+      if (data.ok) {
+        await fetchCatalogs(); setFormMatricula({ equipo_id: '', competicion_id: '' });
+      }
+    } catch (error) { handleApiError(error); }
+    finally { setLoading(false); }
   };
 
-  // --- PARTIDOS ---
   const handleSubmitPartido = async (e) => {
     e.preventDefault(); setLoading(true);
     try {
-      const payload = {
-        competicion_id: parseInt(formPartido.competicion_id),
-        equipo_local_id: parseInt(formPartido.equipo_local_id),
-        equipo_visitante_id: parseInt(formPartido.equipo_visitante_id),
-        marcador_local: parseInt(formPartido.marcador_local),
-        marcador_visitante: parseInt(formPartido.marcador_visitante),
-        estado: formPartido.estado
-      };
-      const res = await fetch('http://localhost:8000/partidos/', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(payload) });
-      if (res.ok) { notify('success', 'Encuentro sincronizado'); fetchPartidos(); setFormPartido({ competicion_id: '', equipo_local_id: '', equipo_visitante_id: '', marcador_local: 0, marcador_visitante: 0, estado: 'programado' }); }
-      else { const d = await res.json(); notify('error', d.detail || 'Verifique los equipos'); }
-    } catch (err) { notify('error', 'Fallo al registrar partido'); }
-    setLoading(false);
+      await apiRequest('/partidos/', {
+        method: 'POST',
+        body: {
+          competicion_id: parseInt(formPartido.competicion_id),
+          equipo_local_id: parseInt(formPartido.equipo_local_id),
+          equipo_visitante_id: parseInt(formPartido.equipo_visitante_id),
+          marcador_local: parseInt(formPartido.marcador_local),
+          marcador_visitante: parseInt(formPartido.marcador_visitante),
+          estado: formPartido.estado,
+        },
+      });
+      notify('success', 'Encuentro sincronizado');
+      setFormPartido({ competicion_id: '', equipo_local_id: '', equipo_visitante_id: '', marcador_local: 0, marcador_visitante: 0, estado: 'programado' });
+      await fetchPartidos();
+    } catch (error) { handleApiError(error); }
+    finally { setLoading(false); }
   };
-  const handleEliminarPartido = async (id) => {
-    if (!confirm(`¿Eliminar encuentro #${id}?`)) return;
-    const res = await fetch(`http://localhost:8000/partidos/${id}`, { method: 'DELETE', credentials: 'include' });
-    if (res.ok) fetchPartidos();
+  const handleEliminarPartido = (id) => {
+    if (confirm(`¿Eliminar encuentro #${id} y sus estadísticas?`)) return deleteEntity(`/partidos/${id}`);
   };
 
-  // --- LOGICA ASOCIACIÓN DE HUÉRFANOS ---
   const asociarHuerfano = async (tipo, idItem) => {
-    if(!editConfId) return;
-    const url = `http://localhost:8000/${tipo}/${idItem}`;
-    const item = tipo === 'competiciones' ? competiciones.find(c=>c.id===idItem) : equipos.find(e=>e.id===idItem);
-    await fetch(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({...item, confederacion_id: editConfId}) });
-    fetchCatalogs();
+    if (!editConfId) return;
+    const item = tipo === 'competiciones' ? competiciones.find(c => c.id === idItem) : equipos.find(e => e.id === idItem);
+    try {
+      await apiRequest(`/${tipo}/${idItem}`, { method: 'PUT', body: { ...item, confederacion_id: editConfId } });
+      await fetchCatalogs();
+    } catch (error) { handleApiError(error); }
   };
 
   const compsHuerfanasFiltradas = competiciones.filter(c => !c.confederacion_id && c.pais.toLowerCase().includes(filtroPais.toLowerCase()));
@@ -209,7 +226,7 @@ export default function Dashboard() {
         if (['liga_nacional', 'copa_nacional'].includes(comp.tipo) && eq.pais !== comp.pais) return false;
 
         // 3. Confederación Continental
-        if (comp.confederacion_id && eq.confederacion_id && eq.confederacion_id !== comp.confederacion_id) return false;
+        if (comp.confederacion_id && eq.confederacion_id !== comp.confederacion_id) return false;
 
         return true;
       })
@@ -277,7 +294,7 @@ export default function Dashboard() {
               <input type="password" value={loginForm.password} onChange={(e) => setLoginForm({...loginForm, password: e.target.value})} className={`w-full mt-1.5 px-4 py-3.5 rounded-2xl ${theme.inputBg} border ${theme.inputBorder} text-sm font-medium focus:outline-none transition-all`} required />
             </div>
             {mensajeApi && <div className="p-3 rounded-xl bg-[#F5E6E6] border border-[#EACCCC] text-[#A65C5C] text-xs font-medium text-center">{mensajeApi.texto}</div>}
-            <button type="submit" className={`w-full py-4 rounded-2xl ${theme.primaryBtn} font-bold text-xs uppercase tracking-widest mt-4`}>Iniciar Sesión</button>
+            <button type="submit" disabled={loading} className={`w-full py-4 rounded-2xl ${theme.primaryBtn} font-bold text-xs uppercase tracking-widest mt-4`}>Iniciar Sesión</button>
           </form>
         </div>
       </div>
@@ -313,7 +330,7 @@ export default function Dashboard() {
             ))}
           </div>
 
-          <div className={`hidden sm:flex px-5 py-3 rounded-full ${theme.cardBg} border ${theme.cardBorder} ${theme.cardShadow} text-xs font-medium items-center gap-3`}>
+          <div className={`flex px-5 py-3 rounded-full ${theme.cardBg} border ${theme.cardBorder} ${theme.cardShadow} text-xs font-medium items-center gap-3`}>
             <span className="flex h-2.5 w-2.5 relative"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#8C7A6B] opacity-75"></span><span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#6B5A4D]"></span></span>
             <div className={`w-px h-4 bg-[#D6CEC3]`}></div>
             <button onClick={handleLogout} className="text-[#A65C5C] hover:text-[#8C3A3A] font-bold text-[10px] uppercase tracking-widest transition-all cursor-pointer">Salir</button>

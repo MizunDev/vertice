@@ -54,15 +54,19 @@ La estructura del proyecto debe permitir incorporar otras competiciones posterio
 
 ## 🚧 Estado actual
 
-🟡 **Construcción inicial**
+🟡 **MVP en desarrollo**
 
-Actualmente estamos:
+Ya incluye un panel de administración en React, una API FastAPI con PostgreSQL,
+catálogos de confederaciones, competiciones y equipos, matrículas, partidos y
+estadísticas. El acceso del administrador utiliza una contraseña con hash y
+una cookie de sesión HttpOnly con caducidad.
 
-* aprendiendo Python mediante la construcción del proyecto;
-* definiendo el modelo conceptual de la información;
-* investigando las fuentes de datos;
-* construyendo los primeros componentes de programación;
-* utilizando Git y GitHub para mantener el proyecto versionado y portable.
+Las matrículas y los partidos validan tipo de equipo, país y confederación.
+Ambos equipos deben estar matriculados en el torneo. Borrar un partido también
+borra sus estadísticas, sin afectar a otros encuentros.
+
+La experiencia pública de exploración, las fechas de los encuentros y la ingesta
+de proveedores siguen siendo próximos pasos del producto.
 
 El proyecto se desarrolla progresivamente. Las decisiones técnicas pueden cambiar a medida que aparezcan necesidades reales.
 
@@ -250,11 +254,116 @@ La tecnología se irá definiendo según las necesidades reales del proyecto.
 
 Actualmente:
 
-* **Python** para el aprendizaje y desarrollo inicial;
-* **Git** para control de versiones;
-* **GitHub** para almacenamiento y colaboración del proyecto.
+* **Python 3.12, FastAPI y SQLModel** para la API;
+* **PostgreSQL 15** para persistencia;
+* **React, Vite y Tailwind CSS** para el panel;
+* **Docker Compose y NGINX** para ejecutar el conjunto;
+* **Pytest, Node Test Runner y GitHub Actions** para las comprobaciones.
 
-Otras tecnologías se incorporarán cuando resuelvan un problema concreto.
+## 🚀 Ejecutar VÉRTICE
+
+Necesitas Python 3.12 y Docker con Compose. Desde la raíz del repositorio:
+
+```bash
+python -m src.configure
+```
+
+El asistente pide tu usuario y contraseña, genera una clave de sesión aleatoria y
+guarda `.env` de forma local. La contraseña del administrador se guarda como un
+hash PBKDF2-SHA256 con salt individual y 600 000 iteraciones; no se guarda en texto
+plano. `.env` está excluido de Git. No existe un usuario con contraseña universal.
+
+**Si ya tienes datos en Docker**, introduce la contraseña actual de PostgreSQL
+cuando el asistente la pida. Cambiarla solo en `.env` no cambia la contraseña del
+volumen existente. Conserva ese volumen; no necesitas borrarlo para actualizar.
+Si ya existe `.env`, el asistente no lo sobrescribe: complétalo usando
+[.env.example](.env.example) como referencia. Para generar otro hash sin mostrar
+la contraseña, ejecuta `python -c "from getpass import getpass; from src.security import hash_password; print(hash_password(getpass('Contraseña: ')))"`.
+
+```bash
+docker compose up --build -d
+```
+
+Este comando compila y arranca la base de datos, la API y el frontend. Abre
+[http://localhost](http://localhost) e inicia sesión con las credenciales que
+elegiste. La documentación de la API está en
+[http://localhost/api/docs](http://localhost/api/docs).
+
+NGINX envía `/api/` al backend. Desde otro equipo de tu red puedes abrir la IP del
+servidor; el navegador seguirá usando el mismo origen, sin buscar una API en su
+propio `localhost`. Solo el frontend escucha públicamente; los puertos directos
+de PostgreSQL, pgAdmin y la API se limitan a la máquina anfitriona.
+
+Para detener los servicios conservando los datos:
+
+```bash
+docker compose down
+```
+
+### Configuración
+
+| Variable | Uso |
+| --- | --- |
+| `SECRET_KEY` | Clave aleatoria de al menos 32 bytes. Obligatoria; cambiarla invalida las sesiones anteriores. |
+| `ADMIN_USERNAME` | Usuario administrador, obligatorio. |
+| `ADMIN_PASSWORD_HASH` | Hash generado por el asistente, obligatorio. |
+| `POSTGRES_PASSWORD` | Contraseña de PostgreSQL; conserva la del volumen si ya existía. |
+| `COOKIE_SECURE` | `false` para desarrollo HTTP; `true` al servir mediante HTTPS. |
+| `CORS_ORIGINS` | Orígenes separados por comas para un frontend servido en otro origen. No requiere `*`. |
+| `FRONTEND_PORT` | Puerto del frontend, `80` por defecto. |
+| `VITE_API_URL` | Dirección de la API durante la compilación; `/api` por defecto. |
+
+Para publicar detrás de un dominio, termina HTTPS en el servidor y establece
+`COOKIE_SECURE=true`. La API se niega a arrancar si faltan los secretos requeridos.
+Al actualizar desde la configuración antigua, genera una nueva `SECRET_KEY` y
+elige una contraseña nueva para el administrador.
+
+pgAdmin es opcional. Define `PGADMIN_DEFAULT_EMAIL` y
+`PGADMIN_DEFAULT_PASSWORD` en `.env` y ejecuta
+`docker compose --profile admin up -d pgadmin`. Estará en
+[http://localhost:5050](http://localhost:5050).
+
+### Desarrollo del frontend
+
+Con la API de Docker en marcha:
+
+```bash
+cd frontend
+npm ci
+npm run dev
+```
+
+Vite reenvía `/api` a la API local. Para otra dirección del backend, define
+`API_PROXY_TARGET` en `frontend/.env.local`. Para servir frontend y API en orígenes
+distintos, configura `VITE_API_URL`, el origen permitido en `CORS_ORIGINS` y HTTPS.
+
+## 🧪 Comprobar los cambios
+
+Desde la raíz, instala las dependencias y ejecuta las pruebas:
+
+```bash
+python -m pip install -r requirements.txt
+python -m pytest -q
+```
+
+Por defecto usan SQLite en memoria con claves foráneas activadas. Para comprobar
+PostgreSQL, define `TEST_DATABASE_URL` apuntando a **una base desechable**: las
+pruebas crean y eliminan sus tablas. No usan la base configurada en `DATABASE_URL`.
+Cubren acceso, expiración, cookies, matrículas, cambios incompatibles, creación de
+partidos, valores inválidos y borrado de estadísticas.
+
+Desde `frontend/`:
+
+```bash
+npm ci
+npm test
+npm run lint
+npm run build
+```
+
+GitHub Actions ejecuta estas comprobaciones en cada pull request y al actualizar
+`main`: API contra PostgreSQL, pruebas y compilación del frontend, y un arranque
+Docker completo con login y logout a través de NGINX.
 
 ## 📚 Documentación
 
