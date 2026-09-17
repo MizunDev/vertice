@@ -1,5 +1,6 @@
 import os
 import datetime
+import hmac
 from enum import Enum
 from fastapi import FastAPI, Depends, HTTPException, status, Response, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -9,9 +10,9 @@ from sqlmodel import SQLModel, Field, Session, select, Relationship
 from contextlib import asynccontextmanager
 import jwt
 from src.database import crear_tablas_db, engine
+from src.security import get_auth_settings, verify_password
 
 
-SECRET_KEY = os.getenv("SECRET_KEY", "vertice_super_secreto_jwt_2026")
 ALGORITHM = "HS256"
 
 
@@ -110,13 +111,20 @@ class EquipoConCompeticionesRead(EquipoRead):
     competiciones: list[CompeticionRead] = []
 
 
-class EstadisticasPartido(SQLModel, table=True):
+class EstadisticasBase(SQLModel):
+    partido_id: int = Field(foreign_key="partido.id", gt=0)
+    posesion_local: int = Field(ge=0, le=100)
+    posesion_visitante: int = Field(ge=0, le=100)
+    tiros_puerta_local: int = Field(ge=0)
+    tiros_puerta_visitante: int = Field(ge=0)
+
+
+class EstadisticasCreate(EstadisticasBase):
+    pass
+
+
+class EstadisticasPartido(EstadisticasBase, table=True):
     id: int | None = Field(default=None, primary_key=True)
-    partido_id: int = Field(foreign_key="partido.id")
-    posesion_local: int
-    posesion_visitante: int
-    tiros_puerta_local: int
-    tiros_puerta_visitante: int
     partido: "Partido" = Relationship(back_populates="estadisticas")
 
 
@@ -124,8 +132,8 @@ class PartidoBase(SQLModel):
     competicion_id: int | None = Field(default=None, foreign_key="competicion.id")
     equipo_local_id: int | None = Field(default=None, foreign_key="equipo.id")
     equipo_visitante_id: int | None = Field(default=None, foreign_key="equipo.id")
-    marcador_local: int = Field(default=0)
-    marcador_visitante: int = Field(default=0)
+    marcador_local: int = Field(default=0, ge=0)
+    marcador_visitante: int = Field(default=0, ge=0)
     estado: EstadoPartido
 
 
@@ -141,11 +149,13 @@ class Partido(PartidoBase, table=True):
         back_populates="partidos_visitante",
         sa_relationship_kwargs={"foreign_keys": "[Partido.equipo_visitante_id]"}
     )
-    estadisticas: list[EstadisticasPartido] = Relationship(back_populates="partido")
+    estadisticas: list[EstadisticasPartido] = Relationship(back_populates="partido", cascade_delete=True)
 
 
 class PartidoCreate(PartidoBase):
-    pass
+    competicion_id: int = Field(gt=0)
+    equipo_local_id: int = Field(gt=0)
+    equipo_visitante_id: int = Field(gt=0)
 
 
 class PartidoReadDetail(SQLModel):
@@ -166,8 +176,8 @@ class PartidoConEstadisticasRead(PartidoReadDetail):
 
 
 class LoginRequest(BaseModel):
-    username: str
-    password: str
+    username: str = Field(min_length=1, max_length=64)
+    password: str = Field(min_length=1, max_length=1024)
 
 
 # ==========================================
@@ -175,6 +185,7 @@ class LoginRequest(BaseModel):
 # ==========================================
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    get_auth_settings()  # Fallar al arrancar si no se han configurado secretos.
     crear_tablas_db()
     # Importación local corregida apuntando a src.seed
     from src.seed import ejecutar_seed
@@ -183,11 +194,13 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="VÉRTICE API", lifespan=lifespan)
+app = FastAPI(title="VÉRTICE API", lifespan=lifespan, root_path=os.getenv("ROOT_PATH", ""))
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost", "http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:5174"],
+    allow_origins=[origin.strip() for origin in os.getenv(
+        "CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173"
+    ).split(",") if origin.strip()],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -207,8 +220,14 @@ def verificar_token(request: Request, credentials: HTTPAuthorizationCredentials 
             detail="No autenticado. Falta la cookie o el token de sesión.",
         )
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        return payload.get("sub")
+        settings = get_auth_settings()
+        payload = jwt.decode(
+            token, settings.secret_key, algorithms=[ALGORITHM],
+            options={"require": ["sub", "exp"]},
+        )
+        if payload["sub"] != settings.admin_username:
+            raise jwt.InvalidTokenError("Usuario no autorizado")
+        return payload["sub"]
     except jwt.ExpiredSignatureError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -231,19 +250,29 @@ def get_session():
 # ==========================================
 @app.post("/login")
 def login(credentials: LoginRequest, response: Response):
-    if credentials.username == "admin" and credentials.password == "vertice2026":
-        expire = datetime.datetime.utcnow() + datetime.timedelta(hours=24)
+    settings = get_auth_settings()
+    password_ok = verify_password(credentials.password, settings.admin_password_hash)
+    username_ok = hmac.compare_digest(
+        credentials.username.encode("utf-8"), settings.admin_username.encode("utf-8")
+    )
+    if username_ok and password_ok:
+        expire = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=24)
         payload = {"sub": credentials.username, "exp": expire}
-        token = jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
-        response.set_cookie(key="vertice_token", value=token, httponly=True, secure=False, samesite="lax",
-                            max_age=86400)
+        token = jwt.encode(payload, settings.secret_key, algorithm=ALGORITHM)
+        response.set_cookie(
+            key="vertice_token", value=token, httponly=True,
+            secure=settings.cookie_secure, samesite="lax", max_age=86400, path="/",
+        )
         return {"ok": True, "mensaje": "Sesión iniciada correctamente"}
     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Credenciales incorrectas")
 
 
 @app.post("/logout")
 def logout(response: Response):
-    response.delete_cookie(key="vertice_token")
+    response.delete_cookie(
+        key="vertice_token", path="/", httponly=True,
+        secure=get_auth_settings().cookie_secure, samesite="lax",
+    )
     return {"ok": True, "mensaje": "Sesión cerrada"}
 
 
@@ -332,6 +361,9 @@ def editar_competicion(id: int, comp_in: CompeticionBase, session: Session = Dep
     else:
         comp_in.pais = "Internacional"
 
+    for equipo in comp.equipos:
+        validar_compatibilidad(equipo, comp_in)
+
     for key, value in comp_in.model_dump().items():
         setattr(comp, key, value)
     session.add(comp)
@@ -385,6 +417,9 @@ def editar_equipo(id: int, eq_in: EquipoBase, session: Session = Depends(get_ses
     if eq_in.tipo == TipoEquipo.SELECCION:
         eq_in.pais = eq_in.nombre
 
+    for competicion in eq.competiciones:
+        validar_compatibilidad(eq_in, competicion)
+
     for key, value in eq_in.model_dump().items():
         setattr(eq, key, value)
     session.add(eq)
@@ -409,16 +444,8 @@ def eliminar_equipo(id: int, session: Session = Depends(get_session), usuario: s
     return {"ok": True, "mensaje": "Equipo eliminado."}
 
 
-# --- LA ADUANA: MATRIZ DE COMPATIBILIDAD ESTRICTA ---
-@app.post("/equipos/{equipo_id}/matricular/{competicion_id}")
-def matricular_equipo(equipo_id: int, competicion_id: int, session: Session = Depends(get_session),
-                      usuario: str = Depends(verificar_token)):
-    equipo = session.get(Equipo, equipo_id)
-    competicion = session.get(Competicion, competicion_id)
-
-    if not equipo or not competicion:
-        raise HTTPException(status_code=404, detail="Equipo o Competición no encontrados")
-
+# Una única regla para matrículas, partidos y cambios de equipos/competiciones.
+def validar_compatibilidad(equipo: EquipoBase, competicion: CompeticionBase):
     if competicion.tipo == TipoCompeticion.INTERNACIONAL_SELECCIONES and equipo.tipo != TipoEquipo.SELECCION:
         raise HTTPException(status_code=400, detail="A torneos de selecciones solo pueden entrar selecciones.")
     if competicion.tipo != TipoCompeticion.INTERNACIONAL_SELECCIONES and equipo.tipo == TipoEquipo.SELECCION:
@@ -431,6 +458,16 @@ def matricular_equipo(equipo_id: int, competicion_id: int, session: Session = De
 
     if competicion.confederacion_id and competicion.confederacion_id != equipo.confederacion_id:
         raise HTTPException(status_code=400, detail="El equipo no pertenece a la misma confederación del torneo.")
+
+
+@app.post("/equipos/{equipo_id}/matricular/{competicion_id}")
+def matricular_equipo(equipo_id: int, competicion_id: int, session: Session = Depends(get_session),
+                      usuario: str = Depends(verificar_token)):
+    equipo = session.get(Equipo, equipo_id)
+    competicion = session.get(Competicion, competicion_id)
+    if not equipo or not competicion:
+        raise HTTPException(status_code=404, detail="Equipo o Competición no encontrados")
+    validar_compatibilidad(equipo, competicion)
 
     if competicion in equipo.competiciones:
         return {"ok": False, "mensaje": f"El equipo {equipo.nombre} ya participa en {competicion.nombre}"}
@@ -456,6 +493,14 @@ def crear_partido(partido_in: PartidoCreate, session: Session = Depends(get_sess
 
     if local.id == visita.id:
         raise HTTPException(status_code=400, detail="Un equipo no puede jugar contra sí mismo")
+
+    for equipo in (local, visita):
+        validar_compatibilidad(equipo, comp)
+        if comp not in equipo.competiciones:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{equipo.nombre} no está matriculado en {comp.nombre}.",
+            )
 
     partido_db = Partido.model_validate(partido_in)
     session.add(partido_db)
@@ -518,12 +563,15 @@ def leer_detalle_partido(partido_id: int, session: Session = Depends(get_session
 
 
 @app.post("/estadisticas/", response_model=EstadisticasPartido)
-def crear_estadisticas(estadisticas: EstadisticasPartido, session: Session = Depends(get_session),
+def crear_estadisticas(estadisticas: EstadisticasCreate, session: Session = Depends(get_session),
                        usuario: str = Depends(verificar_token)):
-    session.add(estadisticas)
+    if not session.get(Partido, estadisticas.partido_id):
+        raise HTTPException(status_code=404, detail="Partido no encontrado")
+    estadisticas_db = EstadisticasPartido.model_validate(estadisticas)
+    session.add(estadisticas_db)
     session.commit()
-    session.refresh(estadisticas)
-    return estadisticas
+    session.refresh(estadisticas_db)
+    return estadisticas_db
 
 
 @app.delete("/partidos/{partido_id}")
