@@ -6,15 +6,17 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "lint": "oxlint src vite.config.js",
+    "lint": "oxlint src vite.config.js playwright.config.js e2e",
     "preview": "vite preview",
-    "test": "node --test src/*.test.js"
+    "test": "node --test src/*.test.js",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@tailwindcss/vite": "^4.3.3",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",

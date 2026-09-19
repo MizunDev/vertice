@@ -84,44 +84,31 @@ jobs:
           PY
       - run: docker compose up --build -d
       - name: Probar login, cookie y API a través de NGINX
+        run: python -m scripts.smoke_test
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Instalar pruebas de navegador
+        working-directory: frontend
         run: |
-          python - <<'PY'
-          import http.cookiejar
-          import json
-          import os
-          import time
-          import urllib.error
-          import urllib.request
-          base = 'http://localhost:18080'
-          for attempt in range(30):
-              try:
-                  urllib.request.urlopen(base + '/api/partidos/', timeout=3)
-              except urllib.error.HTTPError as error:
-                  if error.code == 401:
-                      break
-              except (urllib.error.URLError, TimeoutError):
-                  pass
-              time.sleep(1)
-          else:
-              raise RuntimeError('La API no arrancó detrás de NGINX')
-          opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
-          login = urllib.request.Request(base + '/api/login', data=json.dumps({
-              'username': 'smoke', 'password': os.environ['SMOKE_PASSWORD'],
-          }).encode(), headers={'Content-Type': 'application/json'})
-          response = opener.open(login)
-          assert response.status == 200 and 'HttpOnly' in response.headers['Set-Cookie']
-          assert isinstance(json.load(opener.open(base + '/api/partidos/')), list)
-          assert json.load(opener.open(base + '/api/openapi.json'))['info']['title'] == 'VÉRTICE API'
-          assert opener.open(base + '/').status == 200
-          opener.open(urllib.request.Request(base + '/api/logout', data=b''))
-          try:
-              opener.open(base + '/api/partidos/')
-          except urllib.error.HTTPError as error:
-              assert error.code == 401
-          else:
-              raise AssertionError('Logout no eliminó la cookie')
-          print('Docker: login, catálogo, documentación, frontend y logout correctos.')
-          PY
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Probar el panel contra Docker real
+        working-directory: frontend
+        env:
+          SMOKE_BASE_URL: http://localhost:18080
+          SMOKE_DISPOSABLE: '1'
+        run: npm run test:e2e
+      - name: Guardar diagnóstico del navegador si falla
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-browser-diagnostics
+          path: frontend/test-results/
+          if-no-files-found: ignore
+          retention-days: 3
       - name: Mostrar logs si falla
         if: failure()
         run: docker compose logs --no-color api frontend
