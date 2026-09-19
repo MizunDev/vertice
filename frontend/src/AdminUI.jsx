@@ -49,7 +49,7 @@ export function Brand() {
         V<span />
       </span>
       <span>
-        VÉRTICE<small>ADMIN WORKSPACE</small>
+        VÉRTICE<small>FOOTBALL OPERATIONS</small>
       </span>
     </div>
   );
@@ -93,11 +93,19 @@ export function EmptyState({
   );
 }
 
-export function Modal({ title, subtitle, onClose, children }) {
+export function Modal({
+  title,
+  subtitle,
+  onClose,
+  children,
+  busy = false,
+  eyebrow = "VÉRTICE / MESA DE EDICIÓN",
+}) {
   const ref = useRef(null);
   useEffect(() => {
     const dialog = ref.current;
     dialog.showModal();
+    dialog.querySelector("[data-autofocus]")?.focus();
     const previous = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
@@ -110,14 +118,15 @@ export function Modal({ title, subtitle, onClose, children }) {
       ref={ref}
       className="v-dialog"
       aria-labelledby="editor-title"
+      aria-busy={busy || undefined}
       onCancel={(e) => {
         e.preventDefault();
-        onClose();
+        if (!busy) onClose();
       }}
     >
       <div className="v-dialog-head">
         <div>
-          <span className="v-eyebrow">GESTIÓN DEL CATÁLOGO</span>
+          <span className="v-eyebrow">{eyebrow}</span>
           <h2 id="editor-title">{title}</h2>
           <p>{subtitle}</p>
         </div>
@@ -125,6 +134,7 @@ export function Modal({ title, subtitle, onClose, children }) {
           type="button"
           className="v-icon-btn"
           onClick={onClose}
+          disabled={busy}
           aria-label="Cerrar formulario"
         >
           <Icon name="close" />
@@ -213,228 +223,33 @@ export function MatchRow({ match, onDelete }) {
   );
 }
 
-// Illustrations belong to the interface: decorative, local and independent of match data.
+// Bespoke local artwork is decorative: all information and controls remain HTML.
+const artwork = {
+  inicio: ["stadium", "01", "ESTADIO / VISTA GENERAL"],
+  ecosistema: ["catalog", "02", "IDENTIDAD / ECOSISTEMA"],
+  matriculas: ["registration", "03", "ACCESO / PARTICIPACIÓN"],
+  arena: ["matchday", "04", "CANCHA / ENCUENTROS"],
+};
+
 export function SectionArt({ variant = "inicio" }) {
-  const field = variant === "inicio" || variant === "arena";
+  const [asset, number, caption] = artwork[variant] || artwork.inicio;
   return (
-    <svg
-      className="v-section-art"
-      viewBox="0 0 560 330"
-      fill="none"
-      aria-hidden="true"
-    >
-      <defs>
-        <linearGradient
-          id={`floor-${variant}`}
-          x1="160"
-          y1="90"
-          x2="400"
-          y2="310"
-          gradientUnits="userSpaceOnUse"
-        >
-          <stop stopColor="#344c62" />
-          <stop offset="1" stopColor="#162639" />
-        </linearGradient>
-        <linearGradient
-          id={`grass-${variant}`}
-          x1="150"
-          y1="80"
-          x2="390"
-          y2="230"
-          gradientUnits="userSpaceOnUse"
-        >
-          <stop stopColor="#9abe6b" />
-          <stop offset="1" stopColor="#396b56" />
-        </linearGradient>
-        <linearGradient id={`card-${variant}`} x1="0" y1="0" x2="1" y2="1">
-          <stop stopColor="#f1f9e1" />
-          <stop offset="1" stopColor="#b6d28a" />
-        </linearGradient>
-        <filter
-          id={`shadow-${variant}`}
-          x="-50%"
-          y="-50%"
-          width="200%"
-          height="240%"
-        >
-          <feDropShadow
-            dx="0"
-            dy="22"
-            stdDeviation="16"
-            floodColor="#06101b"
-            floodOpacity=".45"
-          />
-        </filter>
-      </defs>
-      <ellipse
-        cx="300"
-        cy="280"
-        rx="188"
-        ry="28"
-        fill="#070e19"
-        opacity=".22"
+    <figure className={`v-section-art v-art-${variant}`} aria-hidden="true">
+      <span className="v-art-index">V / {number}</span>
+      <img
+        key={asset}
+        src={`/art/${asset}.webp`}
+        width="1536"
+        height="1024"
+        alt=""
+        decoding="async"
       />
-      <path
-        d="m52 244 236-139 227 128M105 279l224-131"
-        stroke="#93b2c4"
-        strokeOpacity=".12"
-      />
-      <circle cx="475" cy="77" r="35" stroke="#b3c6cf" strokeOpacity=".1" />
-      <circle cx="475" cy="77" r="51" stroke="#b3c6cf" strokeOpacity=".06" />
-      {field ? (
-        <g filter={`url(#shadow-${variant})`}>
-          <path
-            d="m102 157 175-100 222 128v22L324 309 102 180Z"
-            fill="#102130"
-          />
-          <path
-            d="m102 157 175-100 222 128-175 101Z"
-            fill={`url(#floor-${variant})`}
-          />
-          <path
-            d="m128 151 149-85 195 113-149 86Z"
-            stroke="#657d87"
-            strokeWidth="9"
-          />
-          <path
-            d="m143 151 134-77 180 104-134 77Z"
-            fill={`url(#grass-${variant})`}
-          />
-          {[0, 1, 2, 3, 4].map((i) => (
-            <path
-              key={i}
-              d={`m${143 + i * 36} ${151 + i * 21} 134-77 18 10-134 77Z`}
-              fill="#d5ebba"
-              opacity=".08"
-            />
-          ))}
-          <path
-            d="m154 151 123-70 169 97-123 71ZM238 200l123-71M168 143l32 19 29-17-32-19M432 186l-32-19-29 17 32 19"
-            stroke="#edf6db"
-            strokeWidth="1.5"
-            strokeOpacity=".75"
-          />
-          <ellipse
-            cx="300"
-            cy="165"
-            rx="27"
-            ry="15"
-            transform="rotate(30 300 165)"
-            stroke="#edf6db"
-            strokeWidth="1.5"
-          />
-          <path
-            d="m154 138-8-5v-16l21 12v17m250 47 8 5v-16l-21-12v17"
-            stroke="#d8e9dc"
-            strokeWidth="2"
-          />
-          <path
-            d="M121 145V65m0 0 33 19v8l-33-19m324 95V88m0 0-33-19v8l33 19"
-            stroke="#849aaa"
-            strokeWidth="3"
-          />
-          <path
-            d="m124 68 27 16m-27-11 27 16m291 2-27-16m27 11-27-16"
-            stroke="#e2efc7"
-            strokeWidth="3"
-          />
-          <circle cx="278" cy="171" r="4" fill="#e7f6bc" />
-          <circle cx="332" cy="182" r="4" fill="#142637" />
-          <circle cx="310" cy="144" r="4" fill="#e7f6bc" />
-        </g>
-      ) : (
-        <g filter={`url(#shadow-${variant})`}>
-          <path
-            d="m104 216 170-98 225 130-171 98Z"
-            fill={`url(#floor-${variant})`}
-          />
-          <path
-            d="m160 221 90-52 137 79-91 52Z"
-            stroke="#8fa891"
-            strokeDasharray="5 5"
-          />
-          <g transform="translate(204 53) rotate(13)">
-            <rect x="5" y="8" width="148" height="175" rx="17" fill="#182b3b" />
-            <rect
-              width="148"
-              height="175"
-              rx="17"
-              fill={`url(#card-${variant})`}
-            />
-            {variant === "matriculas" ? (
-              <g>
-                <circle cx="74" cy="55" r="24" fill="#324e43" />
-                <path
-                  d="m62 55 8 8 17-18"
-                  stroke="#d8efa5"
-                  strokeWidth="4"
-                  strokeLinecap="round"
-                />
-                <path
-                  d="M31 104h86M31 117h63"
-                  stroke="#536f55"
-                  strokeWidth="6"
-                  strokeLinecap="round"
-                />
-                <rect
-                  x="30"
-                  y="139"
-                  width="88"
-                  height="14"
-                  rx="7"
-                  fill="#769064"
-                />
-              </g>
-            ) : (
-              <g>
-                <path
-                  d="M53 27h42v23a21 21 0 0 1-42 0Zm0 6H39v13c0 12 10 18 18 18m38-31h14v13c0 12-10 18-18 18M74 72v24M55 102h38"
-                  stroke="#38563f"
-                  strokeWidth="5"
-                  strokeLinejoin="round"
-                />
-                <path
-                  d="M31 129h86M44 144h60"
-                  stroke="#66855a"
-                  strokeWidth="6"
-                  strokeLinecap="round"
-                />
-              </g>
-            )}
-          </g>
-          <g transform="translate(102 132) rotate(-13)">
-            <rect width="94" height="115" rx="12" fill="#789caf" />
-            <path
-              d="m47 20-24 8v24c0 16 24 30 24 30s24-14 24-30V28Z"
-              stroke="#d6e5ea"
-              strokeWidth="3"
-            />
-            <path d="m34 48 9 9 18-20" stroke="#e1f2d5" strokeWidth="3" />
-          </g>
-          <g transform="translate(399 169) rotate(13)">
-            <rect width="87" height="101" rx="11" fill="#f1eee3" />
-            <circle cx="43" cy="38" r="16" fill="#cbd2be" />
-            <path
-              d="M21 73h46M31 84h26"
-              stroke="#7b927c"
-              strokeWidth="5"
-              strokeLinecap="round"
-            />
-          </g>
-        </g>
-      )}
-      <g transform="translate(371 41)">
-        <rect width="118" height="36" rx="18" fill="#d5ef9a" />
-        <circle cx="20" cy="18" r="4" fill="#304535" />
-        <path
-          d="M34 15h60M34 22h40"
-          stroke="#6d8255"
-          strokeWidth="3"
-          strokeLinecap="round"
-        />
-      </g>
-      <circle cx="93" cy="94" r="5" fill="#c8e998" opacity=".65" />
-      <path d="M464 285h14m-7-7v14" stroke="#b9d1dc" strokeOpacity=".5" />
-    </svg>
+      <span className="v-art-cross v-art-cross-top" />
+      <span className="v-art-cross v-art-cross-bottom" />
+      <figcaption>
+        <span>{caption}</span>
+        <span>VÉRTICE — OBJETOS DEL JUEGO</span>
+      </figcaption>
+    </figure>
   );
 }

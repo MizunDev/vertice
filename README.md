@@ -1,331 +1,95 @@
 # VÉRTICE
 
-Plataforma web de exploración, resultados y estadísticas de fútbol.
+El fútbol tiene más conexiones de las que caben en un marcador. VÉRTICE es un proyecto personal para explorarlas: entrar por un partido, entender su contexto y seguir hacia un equipo, una competición o una historia que no conocías.
 
-> **La interfaz muestra poco. VÉRTICE sabe mucho.**
+Lo que puedes ejecutar hoy es **el administrador**, no la web pública. Es la mesa de trabajo donde se organiza la información que alimentará esa experiencia.
 
-## 🎯 Qué es VÉRTICE
+![Inicio del administrador de VÉRTICE](docs/admin-overview.webp)
 
-VÉRTICE nace como un proyecto personal para explorar el fútbol a través de sus datos.
+*Captura de la aplicación funcionando con datos de demostración en una base local desechable. Los marcadores no representan resultados reales.*
 
-La idea no es simplemente mostrar resultados o llenar una pantalla de estadísticas, sino crear una experiencia en la que el usuario pueda comenzar consultando un partido y terminar descubriendo equipos, jugadores, competiciones, estadísticas e historias relacionadas.
+## Qué hay funcionando
 
-La navegación debe sentirse natural:
+El panel tiene cuatro espacios:
 
-```text
-PARTIDO
-   ↓
-EQUIPOS / JUGADORES / ESTADÍSTICAS
-   ↓
-OTRO PARTIDO
-   ↓
-OTRO EQUIPO
-   ↓
-OTRO JUGADOR
-   ↓
-🐇 MADRIGUERA FUTBOLÍSTICA
-```
+| Espacio | Para qué sirve |
+| --- | --- |
+| Inicio | Ver los totales del catálogo, los últimos partidos registrados y las referencias que necesitan atención. |
+| Catálogo | Crear y editar confederaciones, competiciones y equipos. Buscar por nombre y filtrar por país, confederación, tipo o matrícula. |
+| Matrículas | Inscribir equipos en las competiciones que les corresponden y revisar su participación. |
+| Partidos | Registrar encuentros, consultar sus marcadores y filtrar por estado. |
 
-La información debe aparecer progresivamente según el contexto y el interés del usuario, evitando interfaces saturadas.
+La API comprueba las reglas de participación: tipo de equipo, país y confederación. Para registrar un partido, ambos equipos deben estar matriculados en el torneo. También permite guardar posesión y tiros a puerta, aunque todavía no hay un editor de estadísticas en el panel.
 
-## 🧭 Objetivo
+El inicio muestra lo que hay en la base, sin actividad inventada. “En vivo” es un estado que se registra manualmente: todavía no existe un proveedor que actualice resultados.
 
-Construir una plataforma de información futbolística que sea:
+## Levantarlo en local
 
-* clara para alguien que apenas empieza a seguir fútbol;
-* profunda para quien quiere investigar;
-* agradable para navegar;
-* basada en datos estructurados y confiables;
-* capaz de crecer a medida que el proyecto evoluciona.
-
-VÉRTICE no busca copiar la experiencia de otras plataformas deportivas. Busca construir su propia forma de explorar el fútbol.
-
-## 🏆 Competiciones iniciales
-
-El proyecto comenzará centrado en:
-
-* Liga BetPlay Dimayor
-* Torneo BetPlay Dimayor
-* Copa BetPlay Dimayor
-* CONMEBOL Libertadores
-* CONMEBOL Sudamericana
-
-La estructura del proyecto debe permitir incorporar otras competiciones posteriormente.
-
-## 🚧 Estado actual
-
-🟡 **MVP en desarrollo**
-
-Ya incluye un panel de administración en React, una API FastAPI con PostgreSQL,
-catálogos de confederaciones, competiciones y equipos, matrículas, partidos y
-estadísticas. El acceso del administrador utiliza una contraseña con hash y
-una cookie de sesión HttpOnly con caducidad.
-
-Las matrículas y los partidos validan tipo de equipo, país y confederación.
-Ambos equipos deben estar matriculados en el torneo. Borrar un partido también
-borra sus estadísticas, sin afectar a otros encuentros.
-
-La experiencia pública de exploración, las fechas de los encuentros y la ingesta
-de proveedores siguen siendo próximos pasos del producto.
-
-El proyecto se desarrolla progresivamente. Las decisiones técnicas pueden cambiar a medida que aparezcan necesidades reales.
-
-## 🎯 MVP
-
-El primer objetivo funcional de VÉRTICE es permitir:
-
-* consultar partidos;
-* consultar partidos pasados, actuales y próximos;
-* consultar el resultado y estado de un partido;
-* consultar equipos y jugadores;
-* consultar alineaciones;
-* consultar goles, tarjetas y otros eventos;
-* consultar estadísticas disponibles;
-* explorar otros partidos relacionados;
-* navegar entre competiciones.
-
-El MVP debe comenzar pequeño y crecer a partir de datos y problemas reales, evitando construir infraestructura innecesaria antes de necesitarla.
-
-## 📊 Datos
-
-VÉRTICE debe trabajar con datos estructurados provenientes de fuentes confiables.
-
-La prioridad será utilizar:
-
-1. organizadores oficiales de las competiciones;
-2. federaciones y ligas oficiales;
-3. proveedores especializados de datos deportivos;
-4. otras fuentes cuando aporten información útil y verificable.
-
-Las estadísticas disponibles dependerán de cada competición y de las fuentes utilizadas.
-
-Algunas categorías que VÉRTICE puede manejar incluyen:
-
-* resultados;
-* posesión;
-* tiros;
-* tiros a puerta;
-* tiros fuera;
-* tiros bloqueados;
-* córners;
-* faltas;
-* fuera de juego;
-* tarjetas;
-* pases;
-* precisión de pases;
-* goles;
-* asistencias;
-* minutos;
-* entradas;
-* intercepciones;
-* despejes;
-* atajadas;
-* otras métricas disponibles.
-
-Las estadísticas no deben asumirse como universales. Si una fuente no proporciona una métrica de forma fiable, VÉRTICE no debe inventarla.
-
-## 🧠 Modelo de información
-
-VÉRTICE debe construir su propio modelo de información en lugar de depender directamente de la estructura de una única fuente.
-
-Conceptualmente, el dominio incluye elementos como:
-
-```text
-Competición
-   ↓
-Edición
-   ↓
-Fase
-   ↓
-Contexto competitivo
-   ↓
-Partido
-   ├── Equipos
-   ├── Eventos
-   ├── Alineaciones
-   └── Estadísticas
-```
-
-Las competiciones no necesariamente comparten la misma estructura. Una competición puede utilizar jornadas, grupos, rondas, llaves, partidos de ida y vuelta u otros formatos.
-
-Por esta razón, el modelo debe ser flexible.
-
-## 🔌 Fuentes de datos
-
-La arquitectura de VÉRTICE no debe quedar atada a un único proveedor.
-
-La idea general es:
-
-```text
-FUENTES
-   ↓
-INGESTA
-   ↓
-NORMALIZACIÓN
-   ↓
-MODELO VÉRTICE
-   ↓
-DATOS
-   ↓
-BACKEND / API
-   ↓
-FRONTEND
-```
-
-Los datos provenientes de diferentes fuentes deben poder transformarse a conceptos comunes dentro de VÉRTICE.
-
-También se debe conservar la identificación de origen cuando sea necesario para poder rastrear de dónde proviene un dato.
-
-## 🧭 Experiencia de navegación
-
-La interfaz debe priorizar:
-
-* jerarquía visual clara;
-* información progresiva;
-* espacios suficientes;
-* pocas acciones principales por pantalla;
-* estadísticas agrupadas por contexto;
-* navegación sencilla;
-* descubrimiento;
-* continuidad entre entidades.
-
-El objetivo no es mostrar todo al mismo tiempo.
-
-La interfaz debe permitir que el usuario profundice cuando tenga interés, sin obligarlo a consumir toda la información desde el principio.
-
-### Flujo inicial
-
-```text
-ABRO VÉRTICE
-      ↓
-PARTIDO MÁS RELEVANTE
-      ↓
-PARTIDOS EN VIVO
-      ↓
-PRÓXIMOS PARTIDOS
-      ↓
-PARTIDOS TERMINADOS
-      ↓
-DESCUBRIMIENTO
-```
-
-El diseño visual concreto se definirá durante el desarrollo del frontend y la iteración del producto. Este README describe principios, no una maqueta definitiva.
-
-## 🚫 Lo que VÉRTICE no busca hacer
-
-VÉRTICE no busca:
-
-* mostrar toda la información disponible simultáneamente;
-* saturar la interfaz con tarjetas;
-* utilizar banners invasivos;
-* sacrificar legibilidad por cantidad de estadísticas;
-* crear navegación innecesariamente complicada;
-* copiar la estructura visual de plataformas deportivas existentes;
-* construir infraestructura solamente porque técnicamente sea posible.
-
-## 🌎 Descubrimiento
-
-Una parte importante de VÉRTICE es hacer que información futbolística poco accesible o difícil de encontrar sea más fácil de explorar.
-
-Esto incluye competiciones, partidos, jugadores, equipos e historias que pueden tener poca presencia o poca estructura en otros sitios.
-
-El objetivo es **mejorar la capacidad de descubrimiento**, no fabricar artificialmente interés.
-
-## 🤖 Información para humanos y máquinas
-
-A largo plazo, VÉRTICE aspira a que su información sea útil tanto para personas como para sistemas que necesiten consultar conocimiento futbolístico.
-
-Para ello, los datos deben tender a ser:
-
-* estructurados;
-* consistentes;
-* contextualizados;
-* identificables;
-* trazables;
-* actualizables.
-
-Esto podría permitir en el futuro APIs públicas, páginas estructuradas, URLs estables, datos para buscadores y otras formas de acceso.
-
-No forma parte del MVP inmediato.
-
-## 🛠️ Tecnologías
-
-La tecnología se irá definiendo según las necesidades reales del proyecto.
-
-Actualmente:
-
-* **Python 3.12, FastAPI y SQLModel** para la API;
-* **PostgreSQL 15** para persistencia;
-* **React, Vite y Tailwind CSS** para el panel;
-* **Docker Compose y NGINX** para ejecutar el conjunto;
-* **Pytest, Node Test Runner y GitHub Actions** para las comprobaciones.
-
-## 🚀 Ejecutar VÉRTICE
-
-Necesitas Python 3.12 y Docker con Compose. Desde la raíz del repositorio:
+Necesitas Git, Python 3.12 y Docker con Compose. No necesitas instalar Node ni PostgreSQL en tu máquina para usar el conjunto con Docker.
 
 ```bash
+git clone https://github.com/MizunDev/vertice.git
+cd vertice
 python -m src.configure
-```
-
-El asistente pide tu usuario y contraseña, genera una clave de sesión aleatoria y
-guarda `.env` de forma local. La contraseña del administrador se guarda como un
-hash PBKDF2-SHA256 con salt individual y 600 000 iteraciones; no se guarda en texto
-plano. `.env` está excluido de Git. No existe un usuario con contraseña universal.
-
-**Si ya tienes datos en Docker**, introduce la contraseña actual de PostgreSQL
-cuando el asistente la pida. Cambiarla solo en `.env` no cambia la contraseña del
-volumen existente. Conserva ese volumen; no necesitas borrarlo para actualizar.
-Si ya existe `.env`, el asistente no lo sobrescribe: complétalo usando
-[.env.example](.env.example) como referencia. Para generar otro hash sin mostrar
-la contraseña, ejecuta `python -c "from getpass import getpass; from src.security import hash_password; print(hash_password(getpass('Contraseña: ')))"`.
-
-```bash
 docker compose up --build -d
 ```
 
-Este comando compila y arranca la base de datos, la API y el frontend. Abre
-[http://localhost](http://localhost) e inicia sesión con las credenciales que
-elegiste. La documentación de la API está en
-[http://localhost/api/docs](http://localhost/api/docs).
+En Linux, usa `python3` si tu instalación no tiene el comando `python`.
 
-NGINX envía `/api/` al backend. Desde otro equipo de tu red puedes abrir la IP del
-servidor; el navegador seguirá usando el mismo origen, sin buscar una API en su
-propio `localhost`. Solo el frontend escucha públicamente; los puertos directos
-de PostgreSQL, pgAdmin y la API se limitan a la máquina anfitriona.
+El asistente pide un usuario y una contraseña para el administrador y crea tu `.env`. No hay una contraseña universal. La contraseña del administrador se guarda como hash; la de PostgreSQL queda en ese archivo local, que no se sube a Git.
 
-Para detener los servicios conservando los datos:
+Abre [localhost](http://localhost) e inicia sesión con lo que acabas de configurar. La documentación de la API está en [localhost/api/docs](http://localhost/api/docs).
+
+Si ya tenías una base en Docker, conserva su contraseña cuando el asistente la pida. Si ya tienes `.env`, no vuelvas a ejecutar el asistente: revisa tu archivo con [.env.example](.env.example) como referencia.
+
+### Actualizar sin perder los datos
+
+Desde la raíz del repositorio:
+
+```bash
+git pull --ff-only
+docker compose up --build -d
+```
+
+Si Git avisa de cambios locales, revísalos antes de continuar; no hace falta descartarlos para actualizar.
+
+Para detenerlo:
 
 ```bash
 docker compose down
 ```
 
-### Configuración
+La base se conserva en el volumen `postgres_data`. No añadas `-v` si quieres mantenerla.
 
-| Variable | Uso |
+### Si algo no arranca
+
+```bash
+docker compose ps
+docker compose logs api --tail=80
+```
+
+- **Puerto 80 ocupado:** cambia `FRONTEND_PORT=8080` en `.env`, vuelve a ejecutar Compose y abre [localhost:8080](http://localhost:8080).
+- **Puerto 5432 ocupado:** el Compose actual no publica PostgreSQL en el anfitrión. Si sigue apareciendo ese error, revisa si conservas un Compose antiguo o un archivo de override.
+- **`password authentication failed`:** la contraseña de `.env` no coincide con la del volumen PostgreSQL. Cambiar `.env` no cambia una base ya inicializada. Recupera la contraseña correcta o restablécela dentro de PostgreSQL; no borres el volumen para resolverlo.
+- **Login correcto, pero vuelve a pedir sesión:** en HTTP local necesitas `COOKIE_SECURE=false`. En HTTPS debe ser `true`. Aplica los cambios con `docker compose up -d`.
+
+## Trabajar en el proyecto
+
+La API usa Python, FastAPI y SQLModel; la base es PostgreSQL 15. El administrador está hecho con React 19 y Vite, con un sistema visual propio en CSS. NGINX sirve el frontend y dirige `/api` al backend.
+
+| Carpeta | Contenido |
 | --- | --- |
-| `SECRET_KEY` | Clave aleatoria de al menos 32 bytes. Obligatoria; cambiarla invalida las sesiones anteriores. |
-| `ADMIN_USERNAME` | Usuario administrador, obligatorio. |
-| `ADMIN_PASSWORD_HASH` | Hash generado por el asistente, obligatorio. |
-| `POSTGRES_PASSWORD` | Contraseña de PostgreSQL; conserva la del volumen si ya existía. |
-| `COOKIE_SECURE` | `false` para desarrollo HTTP; `true` al servir mediante HTTPS. |
-| `CORS_ORIGINS` | Orígenes separados por comas para un frontend servido en otro origen. No requiere `*`. |
-| `FRONTEND_PORT` | Puerto del frontend, `80` por defecto. |
-| `VITE_API_URL` | Dirección de la API durante la compilación; `/api` por defecto. |
+| `frontend/src/` | Interfaz, llamadas a la API y filtros del administrador. |
+| `frontend/public/` | Tipografías y renders locales. |
+| `src/` | Modelos, rutas, autenticación, configuración y datos iniciales. |
+| `tests/` | Pruebas de la API y de la configuración. |
+| `frontend/e2e/` | Recorridos de navegador contra la aplicación real. |
+| `scripts/` | Comprobación de arranque a través de NGINX. |
+| `docs/` | Decisiones de producto, experiencia y datos. |
 
-Para publicar detrás de un dominio, termina HTTPS en el servidor y establece
-`COOKIE_SECURE=true`. La API se niega a arrancar si faltan los secretos requeridos.
-Al actualizar desde la configuración antigua, genera una nueva `SECRET_KEY` y
-elige una contraseña nueva para el administrador.
+### Frontend con recarga automática
 
-pgAdmin es opcional. Define `PGADMIN_DEFAULT_EMAIL` y
-`PGADMIN_DEFAULT_PASSWORD` en `.env` y ejecuta
-`docker compose --profile admin up -d pgadmin`. Estará en
-[http://localhost:5050](http://localhost:5050).
-
-### Desarrollo del frontend
-
-Con la API de Docker en marcha:
+Con la API de Docker en marcha, usa Node 24:
 
 ```bash
 cd frontend
@@ -333,24 +97,18 @@ npm ci
 npm run dev
 ```
 
-Vite reenvía `/api` a la API local. Para otra dirección del backend, define
-`API_PROXY_TARGET` en `frontend/.env.local`. Para servir frontend y API en orígenes
-distintos, configura `VITE_API_URL`, el origen permitido en `CORS_ORIGINS` y HTTPS.
+Vite muestra la dirección local y reenvía `/api` a `http://127.0.0.1:8000`. Si el backend está en otro sitio, configura `API_PROXY_TARGET` en `frontend/.env.local`. Más detalles en [frontend/README.md](frontend/README.md).
 
-## 🧪 Comprobar los cambios
+### Pruebas
 
-Desde la raíz, instala las dependencias y ejecuta las pruebas:
+Desde la raíz:
 
 ```bash
+python -m venv .venv
+source .venv/bin/activate
 python -m pip install -r requirements.txt
 python -m pytest -q
 ```
-
-Por defecto usan SQLite en memoria con claves foráneas activadas. Para comprobar
-PostgreSQL, define `TEST_DATABASE_URL` apuntando a **una base desechable**: las
-pruebas crean y eliminan sus tablas. No usan la base configurada en `DATABASE_URL`.
-Cubren acceso, expiración, cookies, matrículas, cambios incompatibles, creación de
-partidos, valores inválidos y borrado de estadísticas.
 
 Desde `frontend/`:
 
@@ -361,55 +119,28 @@ npm run lint
 npm run build
 ```
 
-GitHub Actions ejecuta estas comprobaciones en cada pull request y al actualizar
-`main`: API contra PostgreSQL, pruebas y compilación del frontend, y un arranque
-Docker completo con login y logout a través de NGINX.
+Las pruebas de Python usan SQLite en memoria por defecto. `TEST_DATABASE_URL` permite probar PostgreSQL, pero debe apuntar a una base desechable: las pruebas crean y eliminan tablas. No uses tu base de trabajo.
 
-## 📚 Documentación
+GitHub Actions comprueba la API contra PostgreSQL, las pruebas y la compilación del frontend, y el conjunto Docker con NGINX. Los recorridos de navegador cubren login, edición, matrículas, registro de partidos, persistencia de sesión y móvil.
 
-La documentación detallada del proyecto se encuentra en `docs/`.
+## Configuración y despliegue
 
-Actualmente incluye:
+Las variables están documentadas en [.env.example](.env.example). La configuración de acceso requiere `SECRET_KEY`, `ADMIN_USERNAME` y `ADMIN_PASSWORD_HASH`; PostgreSQL requiere `POSTGRES_PASSWORD`.
 
-* `docs/vision.md` → visión y propósito del proyecto.
-* `docs/ux.md` → principios y flujo de experiencia.
-* `docs/data.md` → modelo conceptual y preguntas relacionadas con los datos.
+Para exponer el panel fuera de tu máquina, configura HTTPS y `COOKIE_SECURE=true`. No publiques `.env`. La sesión usa una cookie HttpOnly con caducidad y se invalida al cambiar `SECRET_KEY`. La API directa solo escucha en `127.0.0.1:8000`; PostgreSQL queda dentro de la red de Docker.
 
-## 🧑‍💻 Proyecto de aprendizaje
+pgAdmin es opcional. Define `PGADMIN_DEFAULT_EMAIL` y `PGADMIN_DEFAULT_PASSWORD` en `.env`, y ejecuta:
 
-VÉRTICE también es un proyecto para aprender programación construyendo algo real.
-
-El objetivo no es copiar código sin entenderlo.
-
-Cada componente debe servir para aprender:
-
-* qué hace;
-* por qué existe;
-* qué problema resuelve;
-* cómo se relaciona con el resto del sistema.
-
-La arquitectura puede cambiar a medida que aprendamos más y descubramos problemas reales.
-
-## 🗺️ Camino del proyecto
-
-```text
-VISIÓN
-  ↓
-MODELO DE INFORMACIÓN
-  ↓
-FUENTES DE DATOS
-  ↓
-PRIMEROS DATOS REALES
-  ↓
-BACKEND
-  ↓
-FRONTEND
-  ↓
-ITERACIÓN
-  ↓
-VÉRTICE CRECE
+```bash
+docker compose --profile admin up -d pgadmin
 ```
 
-Primero construimos el monstruo.
+Quedará en [localhost:5050](http://localhost:5050). Para conectarlo a la base, el servidor es `db`, el puerto `5432`, el usuario `postgres` y la base `vertice_db`.
 
-Después le ponemos la máscara.
+## Lo que sigue
+
+La experiencia pública aún está por construir. Antes de llenarla de pantallas, faltan fechas y contexto de los encuentros, ediciones y fases de competiciones, y una fuente de datos verificable. Los jugadores, las alineaciones, los eventos y la actualización automática también quedan por delante.
+
+La intención es empezar por el fútbol colombiano y las competiciones de CONMEBOL, sin cerrar el modelo a otros países. Esto también es un proyecto para aprender construyendo: las decisiones deben poder entenderse y cambiar cuando haga falta.
+
+[Visión del producto](docs/vision.md) · [Experiencia y diseño](docs/ux.md) · [Modelo de datos](docs/data.md)

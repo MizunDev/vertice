@@ -30,6 +30,8 @@ export default function Dashboard() {
   const [onlyFree, setOnlyFree] = useState(false);
   const [enrollmentSearch, setEnrollmentSearch] = useState("");
   const [showMatchForm, setShowMatchForm] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState(null);
+  const [deleting, setDeleting] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
   const [catalogsReady, setCatalogsReady] = useState(false);
   const [matchesReady, setMatchesReady] = useState(false);
@@ -109,6 +111,7 @@ export default function Dashboard() {
     setShowCompForm(false);
     setShowTeamForm(false);
     setShowMatchForm(false);
+    setPendingDelete(null);
     clearFilters();
     setPartidos([]);
     setConfederaciones([]);
@@ -219,16 +222,29 @@ export default function Dashboard() {
   };
 
   const deleteEntity = async (path) => {
+    setDeleting(true);
     try {
       await apiRequest(path, { method: "DELETE" });
+      setPendingDelete(null);
+      notify("success", "Registro eliminado");
       await Promise.all([fetchCatalogs(), fetchPartidos()]);
     } catch (error) {
       handleApiError(error);
+    } finally {
+      setDeleting(false);
     }
   };
   const handleEliminarConf = (id) => {
-    if (confirm("¿Eliminar? Ligas y equipos quedarán huérfanos pero intactos."))
-      return deleteEntity(`/confederaciones/${id}`);
+    setMensajeApi(null);
+    setPendingDelete({
+      title: "Eliminar confederación",
+      name:
+        confederaciones.find((item) => item.id === id)?.nombre ||
+        `Registro #${id}`,
+      impact:
+        "Sus competiciones y equipos se conservarán, pero quedarán sin confederación.",
+      path: `/confederaciones/${id}`,
+    });
   };
 
   // --- CRUD COMPETICIONES ---
@@ -275,8 +291,16 @@ export default function Dashboard() {
     setShowCompForm(true);
   };
   const handleEliminarComp = (id) => {
-    if (confirm("¿Eliminar liga? Los partidos asociados quedarán sin torneo."))
-      return deleteEntity(`/competiciones/${id}`);
+    setMensajeApi(null);
+    setPendingDelete({
+      title: "Eliminar competición",
+      name:
+        competiciones.find((item) => item.id === id)?.nombre ||
+        `Registro #${id}`,
+      impact:
+        "Se eliminarán sus matrículas. Los equipos se conservarán y los partidos asociados quedarán sin competición.",
+      path: `/competiciones/${id}`,
+    });
   };
 
   // --- CRUD EQUIPOS ---
@@ -320,8 +344,14 @@ export default function Dashboard() {
     setShowTeamForm(true);
   };
   const handleEliminarEq = (id) => {
-    if (confirm("¿Eliminar escuadra? Sus partidos quedarán incompletos."))
-      return deleteEntity(`/equipos/${id}`);
+    setMensajeApi(null);
+    setPendingDelete({
+      title: "Eliminar equipo",
+      name: equipos.find((item) => item.id === id)?.nombre || `Registro #${id}`,
+      impact:
+        "Se eliminarán sus matrículas. Sus partidos se conservarán, pero quedarán sin este equipo.",
+      path: `/equipos/${id}`,
+    });
   };
 
   const handleMatricular = async (e) => {
@@ -377,8 +407,15 @@ export default function Dashboard() {
     }
   };
   const handleEliminarPartido = (id) => {
-    if (confirm(`¿Eliminar encuentro #${id} y sus estadísticas?`))
-      return deleteEntity(`/partidos/${id}`);
+    setMensajeApi(null);
+    const match = partidos.find((item) => item.id === id);
+    setPendingDelete({
+      title: "Eliminar partido",
+      name: `${match?.equipo_local?.nombre || "Sin equipo"} / ${match?.equipo_visitante?.nombre || "Sin equipo"} · #${id}`,
+      impact:
+        "También se eliminarán las estadísticas de este encuentro. Los equipos y la competición se conservarán.",
+      path: `/partidos/${id}`,
+    });
   };
 
   const asociarHuerfano = async (tipo, idItem) => {
@@ -461,27 +498,27 @@ export default function Dashboard() {
   const sections = {
     inicio: {
       label: "Inicio",
-      eyebrow: "EL FÚTBOL, BIEN ORGANIZADO",
+      eyebrow: "EL LADO DEL FÚTBOL QUE LO HACE POSIBLE",
       title: (
         <>
-          Todo el juego.
+          El juego,
           <br />
-          <em>Bajo control.</em>
+          <em>en orden.</em>
         </>
       ),
       description:
-        "Organiza tu universo futbolístico. Competiciones, equipos y partidos, conectados desde un mismo lugar.",
+        "Tú mueves las piezas. Aquí conectas competiciones, equipos y encuentros para que todo lo demás suceda.",
       action: "Explorar el catálogo",
       icon: "grid",
     },
     ecosistema: {
       label: "Catálogo",
-      eyebrow: "LA BASE DE TU UNIVERSO",
+      eyebrow: "02 / EL ARCHIVO DEL FÚTBOL",
       title: (
         <>
-          Cada equipo.
+          El mapa
           <br />
-          <em>En su lugar.</em>
+          <em>del juego.</em>
         </>
       ),
       description:
@@ -491,12 +528,12 @@ export default function Dashboard() {
     },
     matriculas: {
       label: "Matrículas",
-      eyebrow: "CONEXIONES QUE HACEN EQUIPO",
+      eyebrow: "03 / CONEXIONES QUE HACEN EQUIPO",
       title: (
         <>
-          El torneo correcto.
+          Cada equipo,
           <br />
-          <em>El equipo indicado.</em>
+          <em>en su lugar.</em>
         </>
       ),
       description:
@@ -506,12 +543,12 @@ export default function Dashboard() {
     },
     arena: {
       label: "Partidos",
-      eyebrow: "DEL CALENDARIO AL MARCADOR",
+      eyebrow: "04 / DEL ENCUENTRO AL MARCADOR",
       title: (
         <>
-          Cada encuentro.
+          Que ruede
           <br />
-          <em>Una historia.</em>
+          <em>el balón.</em>
         </>
       ),
       description:
@@ -591,7 +628,11 @@ export default function Dashboard() {
     setRefreshing(false);
   };
   const formOpen =
-    showConfForm || showCompForm || showTeamForm || showMatchForm;
+    showConfForm ||
+    showCompForm ||
+    showTeamForm ||
+    showMatchForm ||
+    Boolean(pendingDelete);
   const catalogItems =
     catalogTab === "confederaciones"
       ? confederaciones.filter((c) =>
@@ -667,7 +708,9 @@ export default function Dashboard() {
         <div className="v-login-scene">
           <Brand />
           <div className="v-login-copy">
-            <span className="v-eyebrow">EL FÚTBOL EMPIEZA AQUÍ</span>
+            <span className="v-eyebrow">
+              EL JUEGO EMPIEZA ANTES DEL SILBATO.
+            </span>
             <h1>
               Detrás de
               <br />
@@ -685,7 +728,10 @@ export default function Dashboard() {
         <main className="v-login-form-area">
           <div className="v-login-box">
             <Brand />
-            <span className="v-eyebrow">VÉRTICE ADMIN</span>
+            <span className="v-login-pass">
+              <Icon name="shield" /> ACCESO DE ADMINISTRACIÓN <span>01</span>
+            </span>
+            <span className="v-eyebrow">TU PASE A LA MESA DE CONTROL</span>
             <h2>Bienvenido de nuevo.</h2>
             <p>
               Entra a tu espacio de administración para seguir construyendo el
@@ -735,77 +781,84 @@ export default function Dashboard() {
 
   return (
     <div className="v-app">
-      <aside className="v-sidebar">
-        <Brand />
-        <p className="v-nav-label">ESPACIO DE TRABAJO</p>
+      <a className="v-skip-link" href="#workspace-content">
+        Saltar al contenido
+      </a>
+      <header className="v-masthead">
+        <div className="v-masthead-inner">
+          <Brand />
+          <div className="v-workspace-id">
+            <span>CONTROL ROOM</span>
+            <small>FÚTBOL, DESDE DENTRO.</small>
+          </div>
+          <div className="v-top-actions">
+            <span className="v-admin-tag">
+              <i />
+              Administración
+            </span>
+            <button
+              className="v-icon-btn"
+              disabled={refreshing}
+              onClick={refreshData}
+              aria-label="Actualizar datos"
+              title={refreshing ? "Actualizando…" : "Actualizar datos"}
+            >
+              <Icon
+                name="refresh"
+                className={refreshing ? "v-spinning" : undefined}
+              />
+            </button>
+            <button
+              className="v-session-button"
+              onClick={handleLogout}
+              aria-label="Salir de la sesión"
+            >
+              <span className="v-avatar">AD</span>
+              <span>Salir</span>
+              <Icon name="logout" />
+            </button>
+          </div>
+        </div>
+      </header>
+      <div className="v-navigation">
         <nav className="v-nav" aria-label="Navegación principal">
           {[
-            ["inicio", "home"],
-            ["ecosistema", "grid"],
-            ["matriculas", "link"],
-            ["arena", "pitch"],
-          ].map(([tab, icon]) => (
+            ["inicio", "01"],
+            ["ecosistema", "02"],
+            ["matriculas", "03"],
+            ["arena", "04"],
+          ].map(([tab, number]) => (
             <button
               key={tab}
               aria-label={sections[tab].label}
               aria-current={activeTab === tab ? "page" : undefined}
               onClick={() => setActiveTab(tab)}
             >
-              <Icon name={icon} />
+              <small>{number}</small>
               <span>{sections[tab].label}</span>
+              <Icon name="arrow" />
             </button>
           ))}
         </nav>
-        <div className="v-sidebar-note">
-          <Icon name="shield" />
-          <strong>El orden también juega.</strong>
-          <p>Un buen catálogo es el inicio de una gran experiencia.</p>
-        </div>
-        <div className="v-user">
-          <span className="v-avatar">AD</span>
-          <div>
-            <strong>Administración</strong>
-            <small>VÉRTICE Workspace</small>
-          </div>
-          <button onClick={handleLogout} aria-label="Cerrar sesión">
-            <Icon name="logout" />
-          </button>
-        </div>
-      </aside>
-      <main className="v-main">
-        <header className="v-topbar">
-          <div className="v-breadcrumb">
-            Workspace <span>/</span> <strong>{section.label}</strong>
-          </div>
-          <div className="v-mobile-brand">
-            <Brand />
-          </div>
-          <div className="v-top-actions">
-            <span className="v-admin-tag">
-              <Icon name="shield" />
-              Entorno de administración
-            </span>
-            <button
-              className="v-text-btn"
-              disabled={refreshing}
-              onClick={refreshData}
-              aria-label="Actualizar datos"
-            >
-              <Icon name="refresh" />
-              <span>{refreshing ? "Actualizando…" : "Actualizar"}</span>
-            </button>
-            <button
-              className="v-icon-btn"
-              onClick={handleLogout}
-              aria-label="Salir de la sesión"
-            >
-              <Icon name="logout" />
-            </button>
-          </div>
-        </header>
+        <span className="v-nav-caption">
+          LA TRIBUNA ES AFUERA.
+          <br />
+          <strong>EL CONTROL ESTÁ AQUÍ.</strong>
+        </span>
+      </div>
+      <main
+        className={`v-main v-page-${activeTab}`}
+        id="workspace-content"
+        tabIndex={-1}
+      >
         <div className="v-content">
           <div className="v-page-intro">
             <div>
+              <span className="v-section-kicker">
+                {activeTab === "inicio"
+                  ? "VISTA GENERAL"
+                  : "ESPACIO DE TRABAJO"}
+              </span>
               <h1>
                 {activeTab === "inicio"
                   ? "Tu centro de operaciones"
@@ -832,7 +885,10 @@ export default function Dashboard() {
               </span>
             )}
           </div>
-          <section className="v-hero">
+          <section
+            className="v-hero"
+            aria-label={`Presentación de ${section.label}`}
+          >
             <div className="v-hero-copy">
               <span className="v-eyebrow">{section.eyebrow}</span>
               <h2>{section.title}</h2>
@@ -843,60 +899,75 @@ export default function Dashboard() {
               </button>
             </div>
             <SectionArt variant={activeTab} />
+            <div className="v-hero-baseline" aria-hidden="true">
+              <span>VÉRTICE / OPERACIONES</span>
+              <span>EL FÚTBOL SE EXPLORA. AQUÍ SE ORGANIZA.</span>
+              <Icon name="globe" />
+            </div>
           </section>
 
           {activeTab === "inicio" && (
             <>
-              <div className="v-metrics">
-                {[
-                  {
-                    title: "Competiciones",
-                    value: competiciones.length,
-                    caption: "Ligas y copas en tu catálogo",
-                    icon: "trophy",
-                    action: () => goCatalog("competiciones"),
-                  },
-                  {
-                    title: "Equipos",
-                    value: equipos.length,
-                    caption: "Clubes y selecciones",
-                    icon: "shield",
-                    action: () => goCatalog("equipos"),
-                  },
-                  {
-                    title: "Por jugar",
-                    value: summary.scheduled.length,
-                    caption: "Partidos con estado programado",
-                    icon: "pitch",
-                    action: () => {
-                      setMatchFilter("programado");
-                      setActiveTab("arena");
+              <div className="v-score-strip">
+                <div className="v-score-label">
+                  <span className="v-eyebrow">TU UNIVERSO</span>
+                  <span>
+                    En cifras
+                    <Icon name="arrow" />
+                  </span>
+                </div>
+                <div className="v-metrics">
+                  {[
+                    {
+                      title: "Competiciones",
+                      value: competiciones.length,
+                      caption: "Ligas y copas en tu catálogo",
+                      icon: "trophy",
+                      action: () => goCatalog("competiciones"),
                     },
-                  },
-                  {
-                    title: "Sin matrícula",
-                    value: summary.unregistered.length,
-                    caption: "Equipos sin competición",
-                    icon: "link",
-                    warm: true,
-                    action: () => goEnrollments(true),
-                  },
-                ].map((metric) => (
-                  <button
-                    key={metric.title}
-                    className={`v-metric ${metric.warm ? "v-metric-warm" : ""}`}
-                    onClick={metric.action}
-                  >
-                    <span className="v-metric-top">
-                      {metric.title}
-                      <span className="v-metric-icon">
-                        <Icon name={metric.icon} />
+                    {
+                      title: "Equipos",
+                      value: equipos.length,
+                      caption: "Clubes y selecciones",
+                      icon: "shield",
+                      action: () => goCatalog("equipos"),
+                    },
+                    {
+                      title: "Por jugar",
+                      value: summary.scheduled.length,
+                      caption: "Partidos con estado programado",
+                      icon: "pitch",
+                      action: () => {
+                        setMatchFilter("programado");
+                        setActiveTab("arena");
+                      },
+                    },
+                    {
+                      title: "Sin matrícula",
+                      value: summary.unregistered.length,
+                      caption: "Equipos sin competición",
+                      icon: "link",
+                      warm: true,
+                      action: () => goEnrollments(true),
+                    },
+                  ].map((metric, index) => (
+                    <button
+                      key={metric.title}
+                      className={`v-metric ${metric.warm ? "v-metric-warm" : ""}`}
+                      onClick={metric.action}
+                    >
+                      <span className="v-metric-top">
+                        <span className="v-metric-number">0{index + 1} /</span>
+                        {metric.title}
+                        <span className="v-metric-icon">
+                          <Icon name={metric.icon} />
+                        </span>
                       </span>
-                    </span>
-                    <strong>{ready ? metric.value : "—"}</strong>
-                    <small>{metric.caption}</small>
-                  </button>
-                ))}
+                      <strong>{ready ? metric.value : "—"}</strong>
+                      <small>{metric.caption}</small>
+                    </button>
+                  ))}
+                </div>
               </div>
               {!ready ? (
                 <div className="v-panel">
@@ -907,12 +978,15 @@ export default function Dashboard() {
                 </div>
               ) : (
                 <div className="v-overview">
-                  <div className="v-panel">
+                  <div className="v-panel v-match-board">
                     <div className="v-panel-head">
                       <div>
-                        <h2>Últimos partidos registrados</h2>
+                        <span className="v-eyebrow">
+                          01 / REGISTRO DE PARTIDOS
+                        </span>
+                        <h2>El juego, en marcha.</h2>
                         <p>
-                          Los registros más recientes de tu espacio de trabajo.
+                          Los últimos encuentros que registraste, de un vistazo.
                         </p>
                       </div>
                       <button
@@ -946,11 +1020,12 @@ export default function Dashboard() {
                     )}
                   </div>
                   <div className="v-stack">
-                    <div className="v-panel">
+                    <div className="v-panel v-task-board">
                       <div className="v-panel-head">
                         <div>
-                          <h2>Para continuar</h2>
-                          <p>Pequeñas tareas que mantienen todo en orden.</p>
+                          <span className="v-eyebrow">02 / PUESTA A PUNTO</span>
+                          <h2>El siguiente movimiento.</h2>
+                          <p>Lo que necesita tu atención.</p>
                         </div>
                         <Icon name="clock" />
                       </div>
@@ -1054,7 +1129,8 @@ export default function Dashboard() {
                     <div className="v-panel">
                       <div className="v-panel-head">
                         <div>
-                          <h2>Tu mapa de competiciones</h2>
+                          <span className="v-eyebrow">03 / ECOSISTEMA</span>
+                          <h2>Territorio de juego.</h2>
                           <p>Equipos matriculados en cada torneo.</p>
                         </div>
                       </div>
@@ -1093,7 +1169,11 @@ export default function Dashboard() {
                   }}
                 >
                   <Icon name="shield" />
-                  <span>Añadir equipo</span>
+                  <span>
+                    <small>01 / AMPLÍA EL CATÁLOGO</small>
+                    <strong>Añadir equipo</strong>
+                    <em>Un nuevo escudo entra en juego.</em>
+                  </span>
                   <Icon name="arrow" />
                 </button>
                 <button
@@ -1101,7 +1181,11 @@ export default function Dashboard() {
                   onClick={() => goEnrollments()}
                 >
                   <Icon name="link" />
-                  <span>Gestionar matrículas</span>
+                  <span>
+                    <small>02 / CONECTA LAS PIEZAS</small>
+                    <strong>Gestionar matrículas</strong>
+                    <em>Cada equipo, en su competición.</em>
+                  </span>
                   <Icon name="arrow" />
                 </button>
                 <button
@@ -1112,7 +1196,11 @@ export default function Dashboard() {
                   }}
                 >
                   <Icon name="pitch" />
-                  <span>Registrar partido</span>
+                  <span>
+                    <small>03 / ABRE LA CANCHA</small>
+                    <strong>Registrar partido</strong>
+                    <em>El próximo encuentro empieza aquí.</em>
+                  </span>
                   <Icon name="arrow" />
                 </button>
               </div>
@@ -1120,7 +1208,10 @@ export default function Dashboard() {
           )}
 
           {activeTab === "ecosistema" && (
-            <section className="v-panel" aria-label="Catálogo del ecosistema">
+            <section
+              className="v-panel v-catalog-panel"
+              aria-label="Catálogo del ecosistema"
+            >
               <div
                 className="v-tabs"
                 role="tablist"
@@ -1321,6 +1412,12 @@ export default function Dashboard() {
                 )}
                 {catalogItems.map((item) => (
                   <article className="v-catalog-row" key={item.id}>
+                    <span
+                      className="v-record-id"
+                      aria-label={`Registro ${item.id}`}
+                    >
+                      #{String(item.id).padStart(3, "0")}
+                    </span>
                     <Crest src={item.logo} name={item.nombre} />
                     <div className="v-entity-name">
                       <strong>{item.nombre}</strong>
@@ -1413,6 +1510,7 @@ export default function Dashboard() {
               <section className="v-panel">
                 <div className="v-panel-head">
                   <div>
+                    <span className="v-eyebrow">01 / NUEVA CONEXIÓN</span>
                     <h2>Nueva matrícula</h2>
                     <p>Selecciona la competición y después el equipo.</p>
                   </div>
@@ -1495,6 +1593,7 @@ export default function Dashboard() {
               <section className="v-panel">
                 <div className="v-panel-head">
                   <div>
+                    <span className="v-eyebrow">02 / PARTICIPACIÓN</span>
                     <h2>Registro de matrículas</h2>
                     <p>{enrollmentItems.length} equipos en esta vista.</p>
                   </div>
@@ -1605,12 +1704,63 @@ export default function Dashboard() {
             </section>
           )}
           <footer className="v-footer">
-            <span>VÉRTICE / ADMIN</span>
-            <span>El fútbol se explora. Aquí se organiza.</span>
+            <Brand />
+            <span>DISEÑADO PARA MOVER EL JUEGO.</span>
+            <small>ADMINISTRACIÓN / ACCESO RESTRINGIDO</small>
           </footer>
         </div>
       </main>
       {!formOpen && toast}
+
+      {pendingDelete && (
+        <Modal
+          title={pendingDelete.title}
+          subtitle="Revisa el impacto antes de confirmar."
+          eyebrow="VÉRTICE / CONFIRMACIÓN DE BORRADO"
+          busy={deleting}
+          onClose={() => {
+            if (!deleting) {
+              setPendingDelete(null);
+              setMensajeApi(null);
+            }
+          }}
+        >
+          <div className="v-confirm-body">
+            <div className="v-confirm-entity">
+              <Icon name="trash" />
+              <strong>{pendingDelete.name}</strong>
+            </div>
+            <p>{pendingDelete.impact}</p>
+            <p className="v-confirm-warning">
+              Esta acción no se puede deshacer desde el panel.
+            </p>
+            <div className="v-form-footer">
+              <button
+                data-autofocus
+                type="button"
+                className="v-btn v-btn-secondary"
+                disabled={deleting}
+                onClick={() => {
+                  setPendingDelete(null);
+                  setMensajeApi(null);
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="v-btn v-btn-danger"
+                disabled={deleting}
+                onClick={() => deleteEntity(pendingDelete.path)}
+              >
+                {deleting ? "Eliminando…" : "Eliminar registro"}
+                <Icon name="trash" />
+              </button>
+            </div>
+          </div>
+          {toast}
+        </Modal>
+      )}
 
       {showConfForm && (
         <Modal
