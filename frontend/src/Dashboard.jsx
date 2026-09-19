@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { apiCollection, apiRequest } from './api';
+import { EMPTY_FILTERS, COMPETITION_TYPES, changeFilters, countryOptions, filterCatalog } from './catalogFilters';
 
 // ==========================================
 // ICONOS VECTORIALES (REEMPLAZO DE EMOJIS)
@@ -40,6 +41,14 @@ export default function Dashboard() {
   const [formPartido, setFormPartido] = useState({ competicion_id: '', equipo_local_id: '', equipo_visitante_id: '', marcador_local: 0, marcador_visitante: 0, estado: 'programado' });
 
   const [filtroPais, setFiltroPais] = useState('');
+  const [catalogFilters, setCatalogFilters] = useState({ ...EMPTY_FILTERS });
+  const [showConfForm, setShowConfForm] = useState(false);
+  const [showCompForm, setShowCompForm] = useState(false);
+  const [showTeamForm, setShowTeamForm] = useState(false);
+  const catalog = filterCatalog(competiciones, equipos, catalogFilters);
+  const countries = countryOptions(competiciones, equipos, catalogFilters.confederation);
+  const updateFilter = (field, value) => setCatalogFilters(current => changeFilters(current, field, value));
+  const clearFilters = () => setCatalogFilters({ ...EMPTY_FILTERS });
   const [mensajeApi, setMensajeApi] = useState(null);
   const [loading, setLoading] = useState(false);
 
@@ -50,6 +59,7 @@ export default function Dashboard() {
 
   const clearSession = () => {
     setIsLoggedIn(false);
+    clearFilters();
     setPartidos([]); setConfederaciones([]); setCompeticiones([]); setEquipos([]);
     setLoginForm(form => ({ ...form, password: '' }));
   };
@@ -106,12 +116,12 @@ export default function Dashboard() {
         method: editConfId ? 'PUT' : 'POST', body: formConf,
       });
       notify('success', 'Confederación guardada');
-      setFormConf({ nombre: '', logo: '' }); setEditConfId(null);
+      setFormConf({ nombre: '', logo: '' }); setEditConfId(null); setShowConfForm(false);
       await fetchCatalogs();
     } catch (error) { handleApiError(error); }
     finally { setLoading(false); }
   };
-  const handleEditConf = (c) => { setFormConf({ nombre: c.nombre, logo: c.logo }); setEditConfId(c.id); setFiltroPais(''); };
+  const handleEditConf = (c) => { setFormConf({ nombre: c.nombre, logo: c.logo }); setEditConfId(c.id); setShowConfForm(true); setFiltroPais(''); };
 
   const deleteEntity = async (path) => {
     try {
@@ -132,12 +142,12 @@ export default function Dashboard() {
         body: { ...formComp, confederacion_id: parseInt(formComp.confederacion_id) || null },
       });
       notify('success', 'Competición guardada');
-      setFormComp({ nombre: '', logo: '', tipo: 'liga_nacional', pais: '', confederacion_id: '' }); setEditCompId(null);
+      setFormComp({ nombre: '', logo: '', tipo: 'liga_nacional', pais: '', confederacion_id: '' }); setEditCompId(null); setShowCompForm(false);
       await Promise.all([fetchCatalogs(), fetchPartidos()]);
     } catch (error) { handleApiError(error); }
     finally { setLoading(false); }
   };
-  const handleEditComp = (c) => { setFormComp({ nombre: c.nombre, logo: c.logo, tipo: c.tipo, pais: c.pais, confederacion_id: c.confederacion_id || '' }); setEditCompId(c.id); };
+  const handleEditComp = (c) => { setFormComp({ nombre: c.nombre, logo: c.logo, tipo: c.tipo, pais: c.pais, confederacion_id: c.confederacion_id || '' }); setEditCompId(c.id); setShowCompForm(true); };
   const handleEliminarComp = (id) => {
     if (confirm('¿Eliminar liga? Los partidos asociados quedarán sin torneo.')) return deleteEntity(`/competiciones/${id}`);
   };
@@ -151,12 +161,12 @@ export default function Dashboard() {
         body: { ...formEquipo, confederacion_id: parseInt(formEquipo.confederacion_id) || null },
       });
       notify('success', 'Escuadra guardada');
-      setFormEquipo({ nombre: '', logo: '', tipo: 'club', pais: '', confederacion_id: '' }); setEditEqId(null);
+      setFormEquipo({ nombre: '', logo: '', tipo: 'club', pais: '', confederacion_id: '' }); setEditEqId(null); setShowTeamForm(false);
       await Promise.all([fetchCatalogs(), fetchPartidos()]);
     } catch (error) { handleApiError(error); }
     finally { setLoading(false); }
   };
-  const handleEditEq = (eq) => { setFormEquipo({ nombre: eq.nombre, logo: eq.logo, tipo: eq.tipo, pais: eq.pais, confederacion_id: eq.confederacion_id || '' }); setEditEqId(eq.id); };
+  const handleEditEq = (eq) => { setFormEquipo({ nombre: eq.nombre, logo: eq.logo, tipo: eq.tipo, pais: eq.pais, confederacion_id: eq.confederacion_id || '' }); setEditEqId(eq.id); setShowTeamForm(true); };
   const handleEliminarEq = (id) => {
     if (confirm('¿Eliminar escuadra? Sus partidos quedarán incompletos.')) return deleteEntity(`/equipos/${id}`);
   };
@@ -353,23 +363,59 @@ export default function Dashboard() {
         {/* TAB 1: ECOSISTEMA (Confederaciones, Competiciones, Equipos) */}
         {/* ========================================================================= */}
         {activeTab === 'ecosistema' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 animate-fade-in">
+          <section aria-label="Catálogo del ecosistema" className="space-y-6 animate-fade-in">
+            <div className={`p-5 rounded-2xl ${theme.cardBg} border ${theme.cardBorder}`}>
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                <div>
+                  <h2 className="text-sm font-bold">Explorar el catálogo</h2>
+                  <p className={`text-xs mt-1 ${theme.textMuted}`}>Filtra competiciones y equipos sin modificar tus datos.</p>
+                </div>
+                <button type="button" onClick={clearFilters} className="text-xs font-bold underline underline-offset-4 px-3 py-2">Limpiar filtros</button>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+                <label className="text-xs font-medium space-y-2">
+                  <span className="block">Buscar competición o equipo</span>
+                  <input type="search" value={catalogFilters.search} onChange={e => updateFilter('search', e.target.value)} placeholder="Nombre, con o sin tildes…" className={`w-full px-4 py-3 rounded-xl ${theme.inputBg} border ${theme.inputBorder}`} />
+                </label>
+                <label className="text-xs font-medium space-y-2">
+                  <span className="block">Confederación</span>
+                  <select value={catalogFilters.confederation} onChange={e => updateFilter('confederation', e.target.value)} className={`w-full px-3 py-3 rounded-xl ${theme.inputBg} border ${theme.inputBorder}`}>
+                    <option value="">Todas las confederaciones</option>
+                    {confederaciones.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                    <option value="unassigned">Sin confederación (incluye globales)</option>
+                  </select>
+                </label>
+                <label className="text-xs font-medium space-y-2">
+                  <span className="block">País / ámbito</span>
+                  <select value={catalogFilters.country} onChange={e => updateFilter('country', e.target.value)} className={`w-full px-3 py-3 rounded-xl ${theme.inputBg} border ${theme.inputBorder}`}>
+                    <option value="">Todos los países y ámbitos</option>
+                    {countries.map(country => <option key={country} value={country}>{country}</option>)}
+                  </select>
+                </label>
+              </div>
+            </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 items-start gap-6">
 
             {/* CONFEDERACIONES */}
-            <div className={`p-6 md:p-8 rounded-[2rem] ${theme.cardBg} border ${theme.cardBorder} ${theme.cardShadow} flex flex-col h-[720px]`}>
+            <div className={`p-6 md:p-8 rounded-[2rem] ${theme.cardBg} border ${theme.cardBorder} ${theme.cardShadow} flex flex-col min-w-0`}>
               <div className="flex items-center gap-3 mb-6">
                 <div className={`p-2.5 rounded-xl ${theme.badgeBg} text-[#8C7A6B]`}><Icons.Globe /></div>
-                <h3 className="text-xs font-bold uppercase tracking-widest text-[#3E362E]">Confederaciones</h3>
+                <h3 className="text-xs font-bold uppercase tracking-widest text-[#3E362E]">Confederaciones · {confederaciones.length}</h3>
               </div>
-              <form onSubmit={handleSubmitConf} className={`mb-6 p-5 rounded-2xl ${theme.innerCardBg} border ${theme.cardBorder} space-y-4`}>
+              <button type="button" aria-expanded={showConfForm} aria-controls="confederation-form" onClick={() => { setShowConfForm(!showConfForm); setEditConfId(null); setFormConf({ nombre: '', logo: '' }); }} className={`w-full mb-4 px-4 py-3 rounded-xl ${theme.primaryBtn} text-xs font-bold`}>
+                {showConfForm ? 'Cerrar formulario' : '+ Nueva confederación'}
+              </button>
+              {showConfForm && (
+              <form id="confederation-form" onSubmit={handleSubmitConf} className={`mb-6 p-5 rounded-2xl ${theme.innerCardBg} border ${theme.cardBorder} space-y-4`}>
                 <div className="flex justify-between items-center mb-1">
                   <span className={`text-[10px] uppercase font-bold text-[#8C7A6B]`}>{editConfId ? 'Editando Registro...' : 'Crear Nueva'}</span>
-                  {editConfId && <button type="button" onClick={() => {setEditConfId(null); setFormConf({nombre:'', logo:''})}} className="text-[9px] font-bold uppercase text-[#A65C5C] hover:text-[#8C3A3A] transition-colors">Cancelar</button>}
+                  {editConfId && <button type="button" onClick={() => { setEditConfId(null); setFormConf({ nombre: '', logo: '' }); setShowConfForm(false); }} className="text-[9px] font-bold uppercase text-[#A65C5C] hover:text-[#8C3A3A] transition-colors">Cancelar</button>}
                 </div>
                 <input type="text" placeholder="Nombre" value={formConf.nombre} onChange={e => setFormConf({...formConf, nombre: e.target.value})} className={`w-full px-4 py-3 rounded-xl ${theme.inputBg} border ${theme.inputBorder} text-xs`} required />
                 <input type="url" placeholder="URL Logo" value={formConf.logo} onChange={e => setFormConf({...formConf, logo: e.target.value})} className={`w-full px-4 py-3 rounded-xl ${theme.inputBg} border ${theme.inputBorder} text-xs`} required />
-                <button type="submit" className={`w-full py-3 rounded-xl ${theme.primaryBtn} font-bold text-[10px] uppercase tracking-widest`}>Guardar Datos</button>
+                <button type="submit" disabled={loading} className={`w-full py-3 rounded-xl ${theme.primaryBtn} font-bold text-[10px] uppercase tracking-widest`}>Guardar Datos</button>
               </form>
+              )}
 
               {/* ASOCIADOR DE HUÉRFANOS */}
               {editConfId && (
@@ -398,14 +444,14 @@ export default function Dashboard() {
                 </div>
               )}
 
-              <div className="overflow-y-auto custom-scrollbar flex-1 space-y-3 pr-2">
+              <div className="max-h-[560px] overflow-y-auto custom-scrollbar space-y-3 pr-2 pb-1">
                 {confederaciones.map(c => (
                   <div key={c.id} className={`flex items-center justify-between p-4 rounded-2xl border ${theme.cardBorder} ${theme.innerCardBg} ${theme.cardHover}`}>
-                    <div className="flex items-center gap-4">
-                      <FallbackImage src={c.logo} alt={c.nombre} className="w-10 h-10 rounded-full bg-white object-contain p-1 border shadow-sm" />
-                      <p className="text-xs font-bold uppercase">{c.nombre}</p>
+                    <div className="flex items-center gap-4 min-w-0 flex-1">
+                      <FallbackImage src={c.logo} alt={c.nombre} className="w-10 h-10 shrink-0 rounded-full bg-white object-contain p-1 border shadow-sm" />
+                      <p className="text-xs font-bold uppercase break-words min-w-0">{c.nombre}</p>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 shrink-0 ml-3">
                       <ActionButton type="edit" onClick={() => handleEditConf(c)} />
                       <ActionButton type="delete" onClick={() => handleEliminarConf(c.id)} />
                     </div>
@@ -415,48 +461,62 @@ export default function Dashboard() {
             </div>
 
             {/* COMPETICIONES BLINDADAS */}
-            <div className={`p-6 md:p-8 rounded-[2rem] ${theme.cardBg} border ${theme.cardBorder} ${theme.cardShadow} flex flex-col h-[720px]`}>
+            <div className={`p-6 md:p-8 rounded-[2rem] ${theme.cardBg} border ${theme.cardBorder} ${theme.cardShadow} flex flex-col min-w-0`}>
               <div className="flex items-center gap-3 mb-6">
                 <div className={`p-2.5 rounded-xl ${theme.badgeBg} text-[#8C7A6B]`}><Icons.Trophy /></div>
                 <h3 className="text-xs font-bold uppercase tracking-widest text-[#3E362E]">Ligas y Copas</h3>
               </div>
-              <form onSubmit={handleSubmitComp} className={`mb-6 p-5 rounded-2xl ${theme.innerCardBg} border ${theme.cardBorder} space-y-4`}>
+              <button type="button" aria-expanded={showCompForm} aria-controls="competition-form" onClick={() => { setShowCompForm(!showCompForm); setEditCompId(null); setFormComp({ nombre: '', logo: '', tipo: 'liga_nacional', pais: '', confederacion_id: '' }); }} className={`w-full mb-4 px-4 py-3 rounded-xl ${theme.primaryBtn} text-xs font-bold`}>
+                {showCompForm ? 'Cerrar formulario' : '+ Nueva competición'}
+              </button>
+              {showCompForm && (
+              <form id="competition-form" onSubmit={handleSubmitComp} className={`mb-6 p-5 rounded-2xl ${theme.innerCardBg} border ${theme.cardBorder} space-y-4`}>
                 <div className="flex justify-between items-center mb-1">
                   <span className={`text-[10px] uppercase font-bold text-[#8C7A6B]`}>{editCompId ? 'Editando Registro...' : 'Crear Nueva'}</span>
-                  {editCompId && <button type="button" onClick={() => {setEditCompId(null); setFormComp({nombre:'', logo:'', tipo:'liga_nacional', pais:'', confederacion_id:''})}} className="text-[9px] font-bold uppercase text-[#A65C5C] hover:text-[#8C3A3A] transition-colors">Cancelar</button>}
+                  {editCompId && <button type="button" onClick={() => { setEditCompId(null); setFormComp({ nombre: '', logo: '', tipo: 'liga_nacional', pais: '', confederacion_id: '' }); setShowCompForm(false); }} className="text-[9px] font-bold uppercase text-[#A65C5C] hover:text-[#8C3A3A] transition-colors">Cancelar</button>}
                 </div>
                 <input type="text" placeholder="Nombre (ej. Serie A)" value={formComp.nombre} onChange={e => setFormComp({...formComp, nombre: e.target.value})} className={`w-full px-4 py-3 rounded-xl ${theme.inputBg} border ${theme.inputBorder} text-xs`} required />
                 <div className="grid grid-cols-2 gap-3">
-                  <select value={formComp.tipo} onChange={e => setFormComp({...formComp, tipo: e.target.value})} className={`px-3 py-3 rounded-xl ${theme.inputBg} border ${theme.inputBorder} text-[10px]`}>
+                  <select value={formComp.tipo} onChange={e => setFormComp({...formComp, tipo: e.target.value})} className={`min-w-0 w-full px-3 py-3 rounded-xl ${theme.inputBg} border ${theme.inputBorder} text-[10px]`}>
                     <option value="liga_nacional">Liga Nacional</option><option value="copa_nacional">Copa Nac.</option><option value="internacional_clubes">Int. Clubes</option><option value="internacional_selecciones">Int. Selecciones</option>
                   </select>
                   {/* BLINDAJE VISUAL: Solo pide país si es torneo local */}
                   {['liga_nacional', 'copa_nacional'].includes(formComp.tipo) ? (
-                    <input type="text" placeholder="País (Obligatorio)" value={formComp.pais} onChange={e => setFormComp({...formComp, pais: e.target.value})} className={`px-4 py-3 rounded-xl ${theme.inputBg} border ${theme.inputBorder} text-xs`} required />
+                    <input type="text" placeholder="País (Obligatorio)" value={formComp.pais} onChange={e => setFormComp({...formComp, pais: e.target.value})} className={`min-w-0 w-full px-4 py-3 rounded-xl ${theme.inputBg} border ${theme.inputBorder} text-xs`} required />
                   ) : (
-                    <input type="text" value="Internacional" disabled className={`px-4 py-3 rounded-xl bg-[#EBE5DC]/50 border ${theme.inputBorder} text-xs text-[#8C7A6B] font-bold cursor-not-allowed`} />
+                    <input type="text" value="Internacional" disabled className={`min-w-0 w-full px-4 py-3 rounded-xl bg-[#EBE5DC]/50 border ${theme.inputBorder} text-xs text-[#8C7A6B] font-bold cursor-not-allowed`} />
                   )}
                 </div>
                 <div className="grid grid-cols-2 gap-3">
-                  <input type="url" placeholder="URL Logo" value={formComp.logo} onChange={e => setFormComp({...formComp, logo: e.target.value})} className={`px-4 py-3 rounded-xl ${theme.inputBg} border ${theme.inputBorder} text-xs`} required />
-                  <select value={formComp.confederacion_id} onChange={e => setFormComp({...formComp, confederacion_id: e.target.value})} className={`px-3 py-3 rounded-xl ${theme.inputBg} border ${theme.inputBorder} text-[10px]`}>
+                  <input type="url" placeholder="URL Logo" value={formComp.logo} onChange={e => setFormComp({...formComp, logo: e.target.value})} className={`min-w-0 w-full px-4 py-3 rounded-xl ${theme.inputBg} border ${theme.inputBorder} text-xs`} required />
+                  <select value={formComp.confederacion_id} onChange={e => setFormComp({...formComp, confederacion_id: e.target.value})} className={`min-w-0 w-full px-3 py-3 rounded-xl ${theme.inputBg} border ${theme.inputBorder} text-[10px]`}>
                     <option value="">(Sin Confed.)</option>
                     {confederaciones.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
                   </select>
                 </div>
-                <button type="submit" className={`w-full py-3 rounded-xl ${theme.primaryBtn} font-bold text-[10px] uppercase tracking-widest`}>Guardar Datos</button>
+                <button type="submit" disabled={loading} className={`w-full py-3 rounded-xl ${theme.primaryBtn} font-bold text-[10px] uppercase tracking-widest`}>Guardar Datos</button>
               </form>
-              <div className="overflow-y-auto custom-scrollbar flex-1 space-y-3 pr-2">
-                {competiciones.map(c => (
+              )}
+              <label className="block text-xs font-medium mb-4">
+                <span className="block mb-2">Tipo de competición</span>
+                <select value={catalogFilters.competitionType} onChange={e => updateFilter('competitionType', e.target.value)} className={`w-full px-3 py-3 rounded-xl ${theme.inputBg} border ${theme.inputBorder}`}>
+                  <option value="">Todos los tipos</option>
+                  {Object.entries(COMPETITION_TYPES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                </select>
+              </label>
+              <p role="status" className={`text-xs mb-4 ${theme.textMuted}`}>{catalog.competitions.length} de {competiciones.length} competiciones</p>
+              {catalog.competitions.length === 0 && <p className="text-sm p-5 rounded-xl border border-dashed border-[#D6CEC3]">No hay competiciones con estos filtros. Prueba a cambiarlos o limpiarlos.</p>}
+              <div className="max-h-[560px] overflow-y-auto custom-scrollbar space-y-3 pr-2 pb-1">
+                {catalog.competitions.map(c => (
                   <div key={c.id} className={`flex items-center justify-between p-4 rounded-2xl border ${theme.cardBorder} ${theme.innerCardBg} ${theme.cardHover}`}>
-                    <div className="flex items-center gap-4">
-                      <FallbackImage src={c.logo} alt={c.nombre} className="w-10 h-10 object-contain drop-shadow-sm" />
-                      <div>
-                        <p className="text-[11px] font-bold uppercase truncate max-w-[110px]">{c.nombre}</p>
-                        <p className={`text-[9px] uppercase tracking-widest ${theme.textMuted} mt-0.5`}>{c.pais} {!c.confederacion_id && <span className="text-[#8C7A6B] font-bold ml-1">Huérfana</span>}</p>
+                    <div className="flex items-center gap-4 min-w-0 flex-1">
+                      <FallbackImage src={c.logo} alt={c.nombre} className="w-10 h-10 shrink-0 object-contain drop-shadow-sm" />
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-bold uppercase break-words">{c.nombre}</p>
+                        <p className={`text-[9px] uppercase tracking-widest ${theme.textMuted} mt-0.5`}>{COMPETITION_TYPES[c.tipo]} · {c.pais} {!c.confederacion_id && <span className="text-[#8C7A6B] font-bold ml-1">Sin confederación</span>}</p>
                       </div>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 shrink-0 ml-3">
                       <ActionButton type="edit" onClick={() => handleEditComp(c)} />
                       <ActionButton type="delete" onClick={() => handleEliminarComp(c.id)} />
                     </div>
@@ -466,48 +526,67 @@ export default function Dashboard() {
             </div>
 
             {/* EQUIPOS BLINDADOS */}
-            <div className={`p-6 md:p-8 rounded-[2rem] ${theme.cardBg} border ${theme.cardBorder} ${theme.cardShadow} flex flex-col h-[720px]`}>
+            <div className={`p-6 md:p-8 rounded-[2rem] ${theme.cardBg} border ${theme.cardBorder} ${theme.cardShadow} flex flex-col min-w-0`}>
               <div className="flex items-center gap-3 mb-6">
                 <div className={`p-2.5 rounded-xl ${theme.badgeBg} text-[#8C7A6B]`}><Icons.Shield /></div>
-                <h3 className="text-xs font-bold uppercase tracking-widest text-[#3E362E]">Escuadras</h3>
+                <h3 className="text-xs font-bold uppercase tracking-widest text-[#3E362E]">Equipos</h3>
               </div>
-              <form onSubmit={handleSubmitEquipo} className={`mb-6 p-5 rounded-2xl ${theme.innerCardBg} border ${theme.cardBorder} space-y-4`}>
+              <button type="button" aria-expanded={showTeamForm} aria-controls="team-form" onClick={() => { setShowTeamForm(!showTeamForm); setEditEqId(null); setFormEquipo({ nombre: '', logo: '', tipo: 'club', pais: '', confederacion_id: '' }); }} className={`w-full mb-4 px-4 py-3 rounded-xl ${theme.primaryBtn} text-xs font-bold`}>
+                {showTeamForm ? 'Cerrar formulario' : '+ Nuevo equipo'}
+              </button>
+              {showTeamForm && (
+              <form id="team-form" onSubmit={handleSubmitEquipo} className={`mb-6 p-5 rounded-2xl ${theme.innerCardBg} border ${theme.cardBorder} space-y-4`}>
                 <div className="flex justify-between items-center mb-1">
                   <span className={`text-[10px] uppercase font-bold text-[#8C7A6B]`}>{editEqId ? 'Editando Registro...' : 'Crear Nueva'}</span>
-                  {editEqId && <button type="button" onClick={() => {setEditEqId(null); setFormEquipo({nombre:'', logo:'', tipo:'club', pais:'', confederacion_id:''})}} className="text-[9px] font-bold uppercase text-[#A65C5C] hover:text-[#8C3A3A] transition-colors">Cancelar</button>}
+                  {editEqId && <button type="button" onClick={() => { setEditEqId(null); setFormEquipo({ nombre: '', logo: '', tipo: 'club', pais: '', confederacion_id: '' }); setShowTeamForm(false); }} className="text-[9px] font-bold uppercase text-[#A65C5C] hover:text-[#8C3A3A] transition-colors">Cancelar</button>}
                 </div>
                 <input type="text" placeholder="Nombre (ej. Juventus / Colombia)" value={formEquipo.nombre} onChange={e => setFormEquipo({...formEquipo, nombre: e.target.value})} className={`w-full px-4 py-3 rounded-xl ${theme.inputBg} border ${theme.inputBorder} text-xs`} required />
                 <div className="grid grid-cols-2 gap-3">
-                  <select value={formEquipo.tipo} onChange={e => setFormEquipo({...formEquipo, tipo: e.target.value})} className={`px-3 py-3 rounded-xl ${theme.inputBg} border ${theme.inputBorder} text-[10px]`}>
+                  <select value={formEquipo.tipo} onChange={e => setFormEquipo({...formEquipo, tipo: e.target.value})} className={`min-w-0 w-full px-3 py-3 rounded-xl ${theme.inputBg} border ${theme.inputBorder} text-[10px]`}>
                     <option value="club">Club</option><option value="seleccion">Selección</option>
                   </select>
                   {/* BLINDAJE VISUAL: Si es selección, no pide país porque asume el nombre */}
                   {formEquipo.tipo === 'club' ? (
-                    <input type="text" placeholder="País" value={formEquipo.pais} onChange={e => setFormEquipo({...formEquipo, pais: e.target.value})} className={`px-4 py-3 rounded-xl ${theme.inputBg} border ${theme.inputBorder} text-xs`} required />
+                    <input type="text" placeholder="País" value={formEquipo.pais} onChange={e => setFormEquipo({...formEquipo, pais: e.target.value})} className={`min-w-0 w-full px-4 py-3 rounded-xl ${theme.inputBg} border ${theme.inputBorder} text-xs`} required />
                   ) : (
-                    <div className={`px-4 py-3 rounded-xl bg-[#EBE5DC]/50 border ${theme.inputBorder} text-xs text-[#8C7A6B] italic`}>Asume el nombre</div>
+                    <div className={`min-w-0 w-full px-4 py-3 rounded-xl bg-[#EBE5DC]/50 border ${theme.inputBorder} text-xs text-[#8C7A6B] italic`}>Asume el nombre</div>
                   )}
                 </div>
                 <div className="grid grid-cols-2 gap-3">
-                  <input type="url" placeholder="URL Escudo" value={formEquipo.logo} onChange={e => setFormEquipo({...formEquipo, logo: e.target.value})} className={`px-4 py-3 rounded-xl ${theme.inputBg} border ${theme.inputBorder} text-xs`} required />
-                  <select value={formEquipo.confederacion_id} onChange={e => setFormEquipo({...formEquipo, confederacion_id: e.target.value})} className={`px-3 py-3 rounded-xl ${theme.inputBg} border ${theme.inputBorder} text-[10px]`}>
+                  <input type="url" placeholder="URL Escudo" value={formEquipo.logo} onChange={e => setFormEquipo({...formEquipo, logo: e.target.value})} className={`min-w-0 w-full px-4 py-3 rounded-xl ${theme.inputBg} border ${theme.inputBorder} text-xs`} required />
+                  <select value={formEquipo.confederacion_id} onChange={e => setFormEquipo({...formEquipo, confederacion_id: e.target.value})} className={`min-w-0 w-full px-3 py-3 rounded-xl ${theme.inputBg} border ${theme.inputBorder} text-[10px]`}>
                     <option value="">(Sin Confed.)</option>
                     {confederaciones.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
                   </select>
                 </div>
-                <button type="submit" className={`w-full py-3 rounded-xl ${theme.primaryBtn} font-bold text-[10px] uppercase tracking-widest`}>Guardar Datos</button>
+                <button type="submit" disabled={loading} className={`w-full py-3 rounded-xl ${theme.primaryBtn} font-bold text-[10px] uppercase tracking-widest`}>Guardar Datos</button>
               </form>
-              <div className="overflow-y-auto custom-scrollbar flex-1 space-y-3 pr-2">
-                {equipos.map(e => (
+              )}
+              <div role="group" aria-label="Tipo de equipo" className="flex flex-wrap gap-2 mb-4">
+                {[['', 'Todos'], ['club', 'Clubes'], ['seleccion', 'Selecciones']].map(([value, label]) => (
+                  <button key={value} type="button" aria-pressed={catalogFilters.teamType === value} onClick={() => updateFilter('teamType', value)} className={`px-3 py-2 rounded-xl border text-xs font-bold ${catalogFilters.teamType === value ? theme.primaryBtn : theme.innerCardBg + ' ' + theme.cardBorder}`}>{label}</button>
+                ))}
+              </div>
+              <label className="block text-xs font-medium mb-4">
+                <span className="block mb-2">Matriculados en</span>
+                <select value={catalog.selectedCompetition} onChange={e => updateFilter('competition', e.target.value)} className={`w-full px-3 py-3 rounded-xl ${theme.inputBg} border ${theme.inputBorder}`}>
+                  <option value="">Cualquier competición / sin matrícula</option>
+                  {catalog.availableCompetitions.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                </select>
+              </label>
+              <p role="status" className={`text-xs mb-4 ${theme.textMuted}`}>{catalog.teams.length} de {equipos.length} equipos</p>
+              {catalog.teams.length === 0 && <p className="text-sm p-5 rounded-xl border border-dashed border-[#D6CEC3]">No hay equipos con estos filtros. Prueba a cambiarlos o limpiarlos.</p>}
+              <div className="max-h-[560px] overflow-y-auto custom-scrollbar space-y-3 pr-2 pb-1">
+                {catalog.teams.map(e => (
                   <div key={e.id} className={`flex items-center justify-between p-4 rounded-2xl border ${theme.cardBorder} ${theme.innerCardBg} ${theme.cardHover}`}>
-                    <div className="flex items-center gap-4">
-                      <FallbackImage src={e.logo} alt={e.nombre} className="w-10 h-10 object-contain drop-shadow-sm" />
-                      <div>
-                        <p className="text-[11px] font-bold uppercase truncate max-w-[110px]">{e.nombre}</p>
-                        <p className={`text-[9px] uppercase tracking-widest ${theme.textMuted} mt-0.5`}>{e.pais} {!e.confederacion_id && <span className="text-[#8C7A6B] font-bold ml-1">Huérfana</span>}</p>
+                    <div className="flex items-center gap-4 min-w-0 flex-1">
+                      <FallbackImage src={e.logo} alt={e.nombre} className="w-10 h-10 shrink-0 object-contain drop-shadow-sm" />
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-bold uppercase break-words">{e.nombre}</p>
+                        <p className={`text-[9px] uppercase tracking-widest ${theme.textMuted} mt-0.5`}>{e.tipo === 'seleccion' ? 'Selección' : 'Club'} · {e.pais} {!e.confederacion_id && <span className="text-[#8C7A6B] font-bold ml-1">Sin confederación</span>}</p>
                       </div>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 shrink-0 ml-3">
                       <ActionButton type="edit" onClick={() => handleEditEq(e)} />
                       <ActionButton type="delete" onClick={() => handleEliminarEq(e.id)} />
                     </div>
@@ -516,6 +595,7 @@ export default function Dashboard() {
               </div>
             </div>
           </div>
+          </section>
         )}
 
         {/* ========================================================================= */}

@@ -8,7 +8,7 @@
     "build": "vite build",
     "lint": "oxlint src vite.config.js",
     "preview": "vite preview",
-    "test": "node --test src/api.test.js"
+    "test": "node --test src/*.test.js"
   },
   "dependencies": {
     "react": "^19.2.8",
